@@ -5,12 +5,6 @@ from typing import Union
 from pyngrok import ngrok
 from time import sleep
 
-MAX_DATA_LENGTH = 1e5
-HOST_IP = "localhost"
-
-def _str_to_byte(str) -> bytes:
-	return bytes(str, "utf-8")
-
 def new_thread_for_function(function, args : tuple) -> Thread:
 	print(f"Handling incoming data asynchronously with {len(list(args))} arguments")
 	thread = Thread(target=function, args=args)
@@ -27,7 +21,7 @@ class ThreadedServerResponder(BaseHTTPRequestHandler):
 
 	# Write strings to the request wfile (output to client)
 	def _write_wfile(self, message : str) -> None:
-		self.wfile.write( _str_to_byte(message) )
+		self.wfile.write( bytes(message, encoding="utf-8") )
 
 	# Send the status-code and content-type back to the connectee of the server.
 	def _send_response_info(self, status_code=200) -> None:
@@ -60,10 +54,7 @@ class ThreadedServerResponder(BaseHTTPRequestHandler):
 			pass
 		# if there is no content-length value, ignore the request
 		if content_length == None:
-			return None, -1,
-		# if the content-length is larger than the max data length, ignore the request.
-		if content_length > MAX_DATA_LENGTH:
-			return None, content_length
+			return None, -1
 		# get the request data if the content length is larger than 0
 		data = None
 		if content_length > 0:
@@ -82,12 +73,6 @@ class ThreadedServerResponder(BaseHTTPRequestHandler):
 			return False, None, -1
 		# get data from the post request
 		data, content_length = self._get_request_data()
-		# if the content-length is larger than the max data length, ignore the request.
-		if content_length > MAX_DATA_LENGTH:
-			self._send_response_info()
-			message = f"Data exceeds maximum of {MAX_DATA_LENGTH} length. Got {content_length} length."
-			self._write_wfile("{'message' : " + message + "}")
-			return False, None, -1
 		return True, data, content_length
 
 	def do_REQUEST(self, callback, callback_async) -> None:
@@ -165,7 +150,7 @@ def SetupLocalHost(port=500, onGET=None, onPOST=None, onGETAsync=None, onPOSTAsy
 	customThreadedResponder.onServerExit = onServerExit
 	customThreadedResponder.certificateLock = certificateLock
 
-	webServer = HTTPServer((HOST_IP, port), customThreadedResponder)
+	webServer = HTTPServer(('127.0.0.1', port), customThreadedResponder)
 
 	def ThreadExitCallback(self):
 		print("Server Closed")

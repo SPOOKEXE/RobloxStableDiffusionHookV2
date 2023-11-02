@@ -1,5 +1,5 @@
 {
-	"name": "rblx-stable-diffusion",
+	"name": "stablediff-v2",
 	"tree": {
 		"$className": "DataModel",
 		"Workspace" : {
@@ -15,22 +15,17 @@
 		"ReplicatedStorage": {
 			"$className": "ReplicatedStorage",
 			"$ignoreUnknownInstances": true,
-			"StableDiffusionShared" : {
-				"$path" : "roblox/shared"
-			}
+			"$path" : "roblox/ReplicatedStorage"
 		},
 		"ServerScriptService": {
 			"$className": "ServerScriptService",
 			"$ignoreUnknownInstances": true,
-			"$path" : "roblox/server"
+			"$path" : "roblox/ServerScriptService"
 		},
 		"ServerStorage": {
 			"$className": "ServerStorage",
 			"$ignoreUnknownInstances": true,
-			"StableDiffusionModule" : {
-				"$path": "roblox/module",
-				"$ignoreUnknownInstances": true
-			}
+			"$path": "roblox/ServerStorage"
 		},
 		"StarterPlayer" : {
 			"$className": "StarterPlayer",
@@ -38,7 +33,7 @@
 			"StarterPlayerScripts" : {
 				"$className": "StarterPlayerScripts",
 				"$ignoreUnknownInstances": true,
-				"$path": "roblox/client"
+				"$path": "roblox/StarterPlayerScripts"
 			}
 		}
 	}

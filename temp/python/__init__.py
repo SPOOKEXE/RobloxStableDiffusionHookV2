@@ -14,23 +14,6 @@ from network import ( SetupLocalHost, Ngrok, ThreadedServerResponder )
 
 import api as SDAPI
 
-def preprocesses_string( value : str ) -> str:
-	return value.replace(' ', '').strip()
-
-def prepare_compressed_image( image_data : str ) -> tuple:
-	from math import floor
-	from time import time
-	from os import makedirs
-	# load to image
-	image = Image.open( io.BytesIO( base64.b64decode(image_data) ) ).convert('RGB')
-	makedirs('img_cache', exist_ok=True)
-	image.save('img_cache/' + str(floor(time())) + '.jpeg')
-	image.thumbnail((256,256)) # reduce size
-	# print( image.size, len(str( np.array(image).tolist() ).replace(' ', '')) )
-	# compress
-	size, color_pallete, encoded_pixels = compress_image_complete( image, round_n=5, min_usage_count=3 )
-	return size, zlib.compress( bytes( preprocesses_string( str(color_pallete) + "|" + str(encoded_pixels) ), encoding='utf-8' ), level=9 ).hex()
-
 def prepare_decompressed_image( size : tuple, data : str ) -> Image.Image:
 	color_pallete, encoded_pixels = zlib.decompress( bytes.fromhex(data) ).decode('utf-8').replace("'", '"').split('|')
 	return decompress_image_complete(

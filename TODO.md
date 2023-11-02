@@ -5,19 +5,21 @@
 - [✓] image rendering
 - [✓] prompt widget
 - [✓] requests to python server (NGROK)
+- [✓] encrypt prompt information being sent from local scripts to server script
 
 ### [✓] Python:
 - [✓] stable diffusion direct api
 - [✓] image compression and conversion for txt2img
 - [✓] python http server api (NGROK)
+- [✓] log everyones prompts in python (pass player name to python as well)
+- [✓] can connect multiple stable diffusion webuis to a distributor system to evenly distribute the queue
 
 Additional Functionality:
-- [✓] log everyones prompts in python (pass player name to python as well)
-- [✓] encrypt prompt information being sent from local scripts to server script
 - [✗] have a monitor for each player and setup queue system
-- [✗] can connect multiple stable diffusion webuis to a distributor system to evenly distribute the queue
 - [✗] progress updating api + client
 - [✗] ability to clear the board locally
+- [✗] use actors to speed up processing
+- [✗] 512x512 image in roblox? (or optional scaling)
 
 ----
 [✓] [✗]
