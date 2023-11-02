@@ -1,7 +1,7 @@
 
 import requests
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 def pop_indexes( array : list, indexes : list ) -> None:
@@ -25,8 +25,9 @@ class StableDiffusionInstance:
 	'''
 	url : str = None
 	busy : bool = False
-	queue : list = None
-	images : dict = None
+	queue : list = field(default_factory=list)
+	errored_ids : list[str] = field(default_factory=list)
+	images : dict = field(default_factory=dict)
 
 	headers : dict = None
 	cookies : dict = None
@@ -45,7 +46,7 @@ class APIEndpoints:
 	sysinfo = '/internal/sysinfo'
 	ping = '/internal/ping'
 	queue_status = '/queue/status'
-	progress = '/sdapi/v1/progress'
+	progress = '/sdapi/v1/progress?skip_current_image=false'
 	options = '/sdapi/v1/options'
 	txt2img = '/sdapi/v1/txt2img'
 	skip = '/sdapi/v1/skip'
@@ -74,7 +75,7 @@ class StableDiffusionAPI:
 
 	@staticmethod
 	def _internal_request(
-		func : Callable[[str], dict],
+		func : Callable[[str], tuple[bool, Any]],
 		url : str,
 		json : dict = None,
 		headers : dict = None,
@@ -90,7 +91,8 @@ class StableDiffusionAPI:
 		- requests.put
 		'''
 		try:
-			return True, func( url, json=json, headers=headers, cookies=cookies ).json()
+			response : requests.Response = func( url, json=json, headers=headers, cookies=cookies, stream=False )
+			return True, response.json()
 		except requests.ConnectionError as exception:
 			print( APIErrorMessages.connection_error.format( url ) )
 			print( exception )
@@ -361,17 +363,18 @@ class StableDiffusionAPI:
 		Get the stable diffusion instance progress information
 		'''
 		success, response = StableDiffusionAPI._internal_request(
-			requests.post,
-			f'{sd_instance}{APIEndpoints.progress}',
+			requests.get,
+			f'{sd_instance.url}{APIEndpoints.progress}',
 			headers=sd_instance.headers,
 			cookies=sd_instance.cookies
 		)
+
 		if not success:
 			return False, response
 
-		pop_indexes( response, ['current_image', 'textinfo'] )
+		pop_indexes( response, ['current_image', 'textinfo', 'state'] )
 		try:
-			response['eta'] = response.pop('eta_relative')
+			response['eta'] = round(response.pop('eta_relative'), 3)
 		except:
 			pass
 		return True, response
@@ -379,14 +382,14 @@ class StableDiffusionAPI:
 	@staticmethod
 	def get_sd_instance_queue_status( sd_instance : StableDiffusionInstance ) -> tuple[bool, Any]:
 		return StableDiffusionAPI._internal_request(
-			requests.post,
-			f'{sd_instance}{APIEndpoints.queue_status}',
+			requests.get,
+			f'{sd_instance.url}{APIEndpoints.queue_status}',
 			headers=sd_instance.headers,
 			cookies=sd_instance.cookies
 		)
 
 	@staticmethod
-	def text2img( sd_instance : StableDiffusionInstance, arguments : dict ) -> str:
+	def text2img( sd_instance : StableDiffusionInstance, arguments : dict ) -> tuple[bool, Any]:
 		success, err = StableDiffusionAPI.update_sd_instance_options(sd_instance, {
 			'sd_model_checkpoint': arguments.get('checkpoint')
 		})
@@ -394,8 +397,7 @@ class StableDiffusionAPI:
 		if not success:
 			print('Failed to load target checkpoint:', err)
 			return False, err
-
-		success, err = StableDiffusionAPI._internal_request( requests.post, f'{sd_instance.url}{APIEndpoints.txt2img}', json=arguments, headers=sd_instance.headers, cookies=sd_instance.cookies )
+		return StableDiffusionAPI._internal_request( requests.post, f'{sd_instance.url}{APIEndpoints.txt2img}', json=arguments, headers=sd_instance.headers, cookies=sd_instance.cookies )
 
 	@staticmethod
 	def get_sd_instance_operation_image( sd_instance : StableDiffusionInstance, operation_hash : str ) -> tuple[bool, Any]:

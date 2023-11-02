@@ -1,4 +1,4 @@
 /img_cache/
 *.jpeg
 *.pyc
-log.txt
+/logs/

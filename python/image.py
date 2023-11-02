@@ -1,8 +1,13 @@
 
 import numpy
 import json
+import io
+import base64
 
 from PIL import Image, ImageEnhance
+
+def load_image_from_sd( data : str ) -> Image.Image:
+	return Image.open( io.BytesIO( base64.b64decode(data) ) ).convert('RGB')
 
 def round_pixels_to_nearest( pixels : list, round_n : int = 5 ) -> list:
 	return [ [ [ round(r/round_n), round(g/round_n), round(b/round_n) ] for r,g,b in row ] for row in pixels ]
