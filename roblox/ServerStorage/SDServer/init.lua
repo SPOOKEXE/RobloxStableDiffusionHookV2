@@ -36,7 +36,10 @@ local function RequestAsync( url : string, body : any)
 	end
 
 	local isJSON = (response.Headers['content-type'] == 'application/json')
-	return isJSON and HttpService:JSONDecode(response.Body)['message']
+	return isJSON and StableDiffusionShared.DecryptString(
+		HttpService:JSONDecode(response.Body)['message'],
+		'NETWORK_ENCRYPTION_KEY_XDDDDDD'
+	)
 end
 
 local function typeAssert( param_name, value, ... )
