@@ -36,12 +36,10 @@ local function RequestAsync( url : string, body : any)
 	end
 
 	local isJSON = (response.Headers['content-type'] == 'application/json')
-	return isJSON and StableDiffusionShared.DecryptString(
-		HttpService:JSONDecode(response.Body)['message'],
-		'NETWORK_ENCRYPTION_KEY_XDDDDDD'
-	)
+	return isJSON and HttpService:JSONDecode(response.Body)['message']
 end
 
+--[[
 local function typeAssert( param_name, value, ... )
 	local isOfType = false
 	for _, expected_type in ipairs( { ... } ) do
@@ -54,6 +52,7 @@ local function typeAssert( param_name, value, ... )
 		error( string.format("%s must be of types: %s.", param_name, table.concat({...}, ' or ') ) )
 	end
 end
+]]
 
 -- // Module // --
 local Module = {}

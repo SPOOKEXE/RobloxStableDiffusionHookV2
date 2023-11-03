@@ -40,6 +40,10 @@ local InboundBind = Instance.new('BindableEvent')
 InboundBind.Name = 'Inbound'
 InboundBind.Parent = script
 
+local ActorFolder = Instance.new('Folder')
+ActorFolder.Name = 'ActorContainer'
+ActorFolder.Parent = RunService:IsServer() and game:GetService('ServerScriptService') or game:GetService('Players').LocalPlayer:WaitForChild('PlayerScripts')
+
 -- // Module // --
 local Module = {}
 
@@ -72,11 +76,10 @@ function Module.CreateActor() : Actor
 
 	if RunService:IsServer() then
 		Actor.ActorServer.Disabled = false
-		Actor.Parent = game:GetService('ServerScriptService')
 	else
 		Actor.ActorClient.Disabled = false
-		Actor.Parent = game:GetService('Players').LocalPlayer:WaitForChild('PlayerScripts')
 	end
+	Actor.Parent = ActorFolder
 
 	return UUID, Actor
 end

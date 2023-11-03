@@ -70,6 +70,7 @@ def aes_encrypt_cfb( plaintext : str | bytes, key : str, encoding : str = 'utf-8
 	assert type(key) == str, 'Key must be a string.'
 	assert CFB_KEY_LENGTHS.count( len(key) ) != 0, CFB_KEY_LENGTH_ERROR
 	system = AES.new( key=bytes(key, encoding=encoding), mode=AES.MODE_CFB )
+	print(system.block_size)
 	ciphertext : bytes = system.encrypt( bytes(plaintext, encoding=encoding) )
 	return ciphertext.hex(), system.iv.hex()
 
@@ -132,12 +133,18 @@ def test_random_key( ):
 	assert len( generate_random_key( length=64 ) ) == 64, 'Generate random key did not produce key of length 64.'
 
 if __name__ == '__main__':
-	test_random_key( )
-	print('Random Key Passed')
-	test_AES_eax( )
-	print('AES-EAX Passed')
-	test_AES_cfb( )
-	print('AES-CFB Passed')
-	test_B64( )
-	print('Base64 Passed')
+
+	plaintext : str = "test_data"
+	key : str = "0123456789012345"
+	plain_ciphertext, plain_iv = aes_encrypt_cfb(plaintext, key, encoding='utf-8')
+	print(plain_ciphertext, plain_iv)
+
+	# test_random_key( )
+	# print('Random Key Passed')
+	# test_AES_eax( )
+	# print('AES-EAX Passed')
+	# test_AES_cfb( )
+	# print('AES-CFB Passed')
+	# test_B64( )
+	# print('Base64 Passed')
 	pass

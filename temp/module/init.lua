@@ -82,13 +82,6 @@ function Module.GetImagesFromOperationHash( hash : string )
 	return imageArray
 end
 
-function Module.ClearCurrentImage()
-	local TargetScreenGui = workspace:WaitForChild('Part').SurfaceGui
-	local PixelBoardFrame = StableDiffusionShared.PixelBoardModule.PreparePixelBoard( TargetScreenGui )
-
-	StableDiffusionShared.PixelBoardModule.ClearPixelsOnBoard( PixelBoardFrame )
-end
-
 function Module.Text2Image(
 	playerName : string,
 	checkpoint : string,

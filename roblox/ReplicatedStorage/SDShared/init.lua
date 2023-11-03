@@ -3,7 +3,7 @@ local HttpService = game:GetService("HttpService")
 local Character = '█'
 local basePixelText = '<font color="rgb(%s,%s,%s)">%s</font>'
 
-local ENCRYPTION_KEY = 'sup_my_g_how_are_you_going_today'
+local DEFAULT_WIDTH = 256
 
 local TemplateGridFrame = Instance.new('Frame') do
 	TemplateGridFrame.Name = 'Grid'
@@ -59,19 +59,27 @@ end
 -- // Module // --
 local Module = {}
 
-Module.AES = require(script.AES)
 Module.zlib = require(script.zlib)
 Module.ActorPool = require(script.ActorPool)
-
 Module.ActorPool.SetTargetActorAmount( 16 )
 
-local encrypted = Module.AES.encrypt('abcdefghijk', 'test_data', 32, 4)
-local decrypted = Module.AES.decrypt('abcdefghijk', encrypted, 32, 4)
-print('test_data', encrypted, decrypted)
+function Module.ToHex( value : string ) : string
+	return value:gsub('.', function(c)
+		return string.format('%02X', string.byte(c))
+	end)
+end
+
+function Module.FromHex( value : string ) : string
+	return value:gsub('..', function(cc)
+		return string.char(tonumber(cc, 16))
+	end)
+end
 
 -- Set size to 256x256 until PreparePixelBoard calculates the size needed
 -- **TODO:** calculate size to fit pixels
-function Module.PreparePixelBoard( surfaceGui : SurfaceGui, size_x : number, size_y : number ) : Frame
+function Module.PreparePixelBoard( surfaceGui : SurfaceGui, size_x : number?, size_y : number? ) : Frame
+	size_x = size_x or DEFAULT_WIDTH
+	size_y = size_y or DEFAULT_WIDTH
 	local existantFrame = surfaceGui:FindFirstChildWhichIsA('Frame')
 	if existantFrame then
 		return existantFrame
@@ -93,27 +101,12 @@ function Module.PreparePixelBoard( surfaceGui : SurfaceGui, size_x : number, siz
 	return GridFrame
 end
 
-function Module.EncryptString( plaintext : string, key : string ) : ( string, string )
-	return plaintext
-end
-
-function Module.DecryptString( ciphertext : string, key : string ) : string
-	return ciphertext
-end
-
 function Module.DecodePixels( data : string ) : table
-	return HttpService:JSONDecode(
-		Module.DecryptString( Module.zlib.Zlib.Decompress(data), ENCRYPTION_KEY )
-	)
+	return HttpService:JSONDecode( Module.zlib.Zlib.Decompress(data) )
 end
 
 function Module.PreprocessRowMatrix( pixels : table ) : table
-	return Module.ActorPool.DistributeCalculation(
-		'DecodePixelRow',
-		pixels,
-		false,
-		true
-	)
+	return Module.ActorPool.DistributeCalculation( 'DecodePixelRow', pixels, false, true )
 end
 
 function Module.DisplayTextForm( processedRows : table, gridFrame : Frame )
@@ -134,7 +127,7 @@ function Module.CreateRandomPixels( width : number, height : number ) : { table 
 end
 
 function Module.ClearPixelsOnBoard( frame : Frame, width : number? )
-	width = width or 256
+	width = width or DEFAULT_WIDTH
 
 	local blankText = string.format(basePixelText, 0, 0, 0, string.rep(Character, width))
 	for _, Frame in ipairs( frame:GetChildren() ) do
@@ -142,6 +135,12 @@ function Module.ClearPixelsOnBoard( frame : Frame, width : number? )
 			Frame.Label.Text = blankText
 		end
 	end
+end
+
+function Module.ClearCurrentImage( TargetSurfaceGui : SurfaceGui, width : number?, height : number? )
+	-- local TargetScreenGui = workspace:WaitForChild('Part').SurfaceGui
+	local PixelBoardFrame = Module.PreparePixelBoard( TargetSurfaceGui, width, height )
+	Module.ClearPixelsOnBoard( PixelBoardFrame, width )
 end
 
 return Module

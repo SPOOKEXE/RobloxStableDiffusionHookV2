@@ -96,18 +96,6 @@ function Module.DecodePixels( data ) : table
 	return pixels
 end
 
-function Module.EncodeHex(str)
-	return (str:gsub('.', function (c)
-		return string.format('%02X', string.byte(c))
-	end))
-end
-
-function Module.DecodeHex(str)
-	return (str:gsub('..', function (cc)
-		return string.char(tonumber(cc, 16))
-	end))
-end
-
 function Module.Text2ImageSugar( promptData : table ) : table?
 	local ReplicatedStorage = game:GetService('ReplicatedStorage')
 	local StableDiffusionFunction = ReplicatedStorage:WaitForChild('StableDiffusionFunction')
