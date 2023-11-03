@@ -34,7 +34,7 @@ def local_distribute_test( ) -> None:
 
 	print('Setting up stable diffusion instances:')
 	stable_diffusion_instances = [
-		StableDiffusionInstance(url='http://127.0.0.1:7860')
+		StableDiffusionInstance(url='http://127.0.0.1:7861')
 	]
 
 	print('Setting up distributor instance:')
@@ -119,11 +119,10 @@ def run_roblox_http_server( port : int = 500, sd_urls : list = [] ) -> ServerThr
 		)
 
 	ENDPOINTS = {
-		"get_sysinfo" : lambda _, __ : DistributorAPI.get_stable_diffusion_instance_infos( distributor ),
+		"get_sd_instances" : lambda _, __ : DistributorAPI.get_stable_diffusion_instance_infos( distributor ),
 		"get_hash_status" : lambda _, content : DistributorAPI.get_hash_status( distributor, content.get('data').get('hash') ),
 		"get_hash_progress" : lambda _, content : DistributorAPI.get_operation_progress( distributor, content.get('data').get('hash') ),
 		"get_hash_queue" : lambda _, content : DistributorAPI.get_operation_queue_info( distributor, content.get('data').get('hash') ),
-		"get_sd_infos" : lambda _, __ : DistributorAPI.get_stable_diffusion_instance_infos( distributor ),
 		"get_hash_image" : lambda _, content : get_hash_image( distributor, content.get('data').get('hash') ),
 		"post_txt2img" : lambda _, content : txt2img_wrapper( distributor, content.get('data') ),
 	}
@@ -134,6 +133,8 @@ def run_roblox_http_server( port : int = 500, sd_urls : list = [] ) -> ServerThr
 		except:
 			return 400, json.dumps({"message": "invalid json"})
 
+		print(content)
+
 		command : str = content.get('command')
 		if command == None:
 			return 400, json.dumps({"message": "no command parameter"})
@@ -142,7 +143,7 @@ def run_roblox_http_server( port : int = 500, sd_urls : list = [] ) -> ServerThr
 
 		callback = ENDPOINTS.get(command)
 		if callback != None:
-			response_message = json.dumps({ "data" : callback( self, content ) })
+			response_message = json.dumps({ "message" : callback( self, content ) })
 
 		return 200, response_message
 
@@ -161,30 +162,32 @@ if __name__ == '__main__':
 
 	import requests
 
-	webserver = run_roblox_http_server( port=500, sd_urls=['http://127.0.0.1:7861'] )
+	webserver = run_roblox_http_server(
+		port=500,
+		sd_urls=['http://127.0.0.1:7861']
+	)
 
-	# Ngrok.set_port(webserver.webserver.server_port)
-	# Ngrok.open_tunnel()
+	Ngrok.set_port(webserver.webserver.server_port)
+	Ngrok.open_tunnel()
 
-	# print("Ngrok Public Address: ", Ngrok.get_ngrok_addr())
-	# print("Set the server address to the ngrok public address.")
+	print("Ngrok Public Address: ", Ngrok.get_ngrok_addr())
+	print("Set the server address to the ngrok public address.")
 
-	response = requests.post('http://127.0.0.1:500', json={
-		'command' : 'get_sysinfo',
-	})
+	# response = requests.post('http://127.0.0.1:500', json={
+	# 	'command' : 'get_sysinfo',
+	# })
+	# with open('dump.json', 'w') as file:
+	# 	file.write( json.dumps( response.json(), indent=4 ) )
 
-	with open('dump.json', 'w') as file:
-		file.write( json.dumps( response.json(), indent=4 ) )
+	while True:
+		try:
+			sleep(1/60)
+		except KeyboardInterrupt:
+			break
+		except Exception:
+			break
 
-	# while True:
-	# 	try:
-	# 		sleep(1/60)
-	# 	except KeyboardInterrupt:
-	# 		break
-	# 	except Exception:
-	# 		break
-
-	# Ngrok.close_tunnel()
+	Ngrok.close_tunnel()
 	webserver.shutdown()
 
 	print("Webserver Closed")
