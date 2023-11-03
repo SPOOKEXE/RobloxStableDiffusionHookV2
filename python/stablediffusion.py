@@ -11,6 +11,9 @@ def pop_indexes( array : list, indexes : list ) -> None:
 		except:
 			pass
 
+def get_shortened_path( path : str ) -> str:
+	return "\\".join( path.split('\\')[-3:] )
+
 @dataclass
 class StableDiffusionInstance:
 	'''
@@ -131,12 +134,22 @@ class StableDiffusionAPI:
 		if success == False:
 			return False, sys_info
 
+		torch_info = sys_info.get('Torch env info')
+		CPUINFO = sys_info.get('CPU')
+		if CPUINFO != None:
+			CPUINFO.pop('model')
+		if torch_info != None:
+			CPUINFO['name'] = torch_info['cpu_info'][8].split('=')[1].strip()
+
 		return True, {
-			"Path" : sys_info.get('Data path'),
-			"Extensions" : [ ext.get('name') for ext in sys_info.get('Extensions') ],
+			"OS" : torch_info != None and torch_info.get('os') or 'Unknown',
 			"RAM" : sys_info.get('RAM'),
-			"CPU" : sys_info.get('CPU'),
-			"CmdLineArgs" : sys_info.get('Commandline')[1:]
+			"CPU" : CPUINFO,
+			"GPUs" : torch_info != None and torch_info.get('nvidia_gpu_models') or None,
+			"PythonVersion" : torch_info != None and torch_info.get('python_version').split(' ')[0] or None,
+			"TorchVersion" : torch_info != None and torch_info.get('torch_version') or None,
+			"CmdLineArgs" : sys_info.get('Commandline')[1:],
+			"Extensions" : [ ext.get('name') for ext in sys_info.get('Extensions') ],
 		}
 
 	@staticmethod
@@ -214,84 +227,88 @@ class StableDiffusionAPI:
 		# checkpoints
 		success, value = StableDiffusionAPI._internal_request(
 			requests.get,
-			f'{sd_instance}{APIEndpoints.get_checkpoints}',
+			f'{sd_instance.url}{APIEndpoints.get_checkpoints}',
 			headers=sd_instance.headers,
 			cookies=sd_instance.cookies
 		)
 		if success:
-			base_info['checkpoints'] = value
+			base_info['checkpoints'] = [ {
+				'title' : chpt['title'],
+				'model_name' : chpt['model_name']
+			} for chpt in value ]
 		else:
 			print('Failed to get checkpoints from the stable diffusion instance: ', value)
 
 		# hypernetworks
 		success, value = StableDiffusionAPI._internal_request(
 			requests.get,
-			f'{sd_instance}{APIEndpoints.get_hypernetworks}',
+			f'{sd_instance.url}{APIEndpoints.get_hypernetworks}',
 			headers=sd_instance.headers,
 			cookies=sd_instance.cookies
 		)
 		if success:
-			base_info['hypernetworks'] = value
+			base_info['hypernetworks'] = [ data['name'] for data in value ]
 		else:
 			print('Failed to get hypernetworks from the stable diffusion instance: ', value)
 
 		# embeddings
 		success, value = StableDiffusionAPI._internal_request(
 			requests.get,
-			f'{sd_instance}{APIEndpoints.get_embeddings}',
+			f'{sd_instance.url}{APIEndpoints.get_embeddings}',
 			headers=sd_instance.headers,
 			cookies=sd_instance.cookies
 		)
 		if success:
-			base_info['embeddings'] = value
+			base_info['embeddings'] = list( value['loaded'].keys() )
 		else:
 			print('Failed to get embeddings from the stable diffusion instance: ', value)
 
 		# loras
 		success, value = StableDiffusionAPI._internal_request(
 			requests.get,
-			f'{sd_instance}{APIEndpoints.get_loras}',
+			f'{sd_instance.url}{APIEndpoints.get_loras}',
 			headers=sd_instance.headers,
 			cookies=sd_instance.cookies
 		)
+
 		if success:
-			base_info['loras'] = value
+			base_info['loras'] = [ data['name'] for data in value ]
 		else:
 			print('Failed to get loras from the stable diffusion instance: ', value)
 
 		# upscalers
 		success, value = StableDiffusionAPI._internal_request(
 			requests.get,
-			f'{sd_instance}{APIEndpoints.get_upscalers}',
+			f'{sd_instance.url}{APIEndpoints.get_upscalers}',
 			headers=sd_instance.headers,
 			cookies=sd_instance.cookies
 		)
 		if success:
-			base_info['upscalers'] = value
+			base_info['upscalers'] = [ data['name'] for data in value ]
 		else:
 			print('Failed to get upscalers from the stable diffusion instance: ', value)
 
 		# upscaler modes
 		success, value = StableDiffusionAPI._internal_request(
 			requests.get,
-			f'{sd_instance}{APIEndpoints.get_upscaler_modes}',
+			f'{sd_instance.url}{APIEndpoints.get_upscaler_modes}',
 			headers=sd_instance.headers,
 			cookies=sd_instance.cookies
 		)
 		if success:
-			base_info['upscaler_modes'] = value
+			base_info['upscaler_modes'] = [ data['name'] for data in value ]
 		else:
 			print('Failed to get upscaler_modes from the stable diffusion instance: ', value)
 
 		# samplers
 		success, value = StableDiffusionAPI._internal_request(
 			requests.get,
-			f'{sd_instance}{APIEndpoints.get_samplers}',
+			f'{sd_instance.url}{APIEndpoints.get_samplers}',
 			headers=sd_instance.headers,
 			cookies=sd_instance.cookies
 		)
 		if success:
-			base_info['samplers'] = value
+			base_info['samplers'] = [ data['name'] for data in value ]
 		else:
 			print('Failed to get samplers from the stable diffusion instance: ', value)
 
@@ -304,7 +321,7 @@ class StableDiffusionAPI:
 		'''
 		return StableDiffusionAPI._internal_request(
 			requests.post,
-			f'{sd_instance}{APIEndpoints.skip}',
+			f'{sd_instance.url}{APIEndpoints.skip}',
 			headers=sd_instance.headers,
 			cookies=sd_instance.cookies
 		)
@@ -316,7 +333,7 @@ class StableDiffusionAPI:
 		'''
 		return StableDiffusionAPI._internal_request(
 			requests.post,
-			f'{sd_instance}{APIEndpoints.interrupt}',
+			f'{sd_instance.url}{APIEndpoints.interrupt}',
 			headers=sd_instance.headers,
 			cookies=sd_instance.cookies
 		)
@@ -328,7 +345,7 @@ class StableDiffusionAPI:
 		'''
 		return StableDiffusionAPI._internal_request(
 			requests.post,
-			f'{sd_instance}{APIEndpoints.memory}',
+			f'{sd_instance.url}{APIEndpoints.memory}',
 			headers=sd_instance.headers,
 			cookies=sd_instance.cookies
 		)
@@ -340,7 +357,7 @@ class StableDiffusionAPI:
 		'''
 		return StableDiffusionAPI._internal_request(
 			requests.post,
-			f'{sd_instance}{APIEndpoints.reload_active_checkpoint}',
+			f'{sd_instance.url}{APIEndpoints.reload_active_checkpoint}',
 			headers=sd_instance.headers,
 			cookies=sd_instance.cookies
 		)
@@ -352,7 +369,7 @@ class StableDiffusionAPI:
 		'''
 		return StableDiffusionAPI._internal_request(
 			requests.post,
-			f'{sd_instance}{APIEndpoints.unload_active_checkpoint}',
+			f'{sd_instance.url}{APIEndpoints.unload_active_checkpoint}',
 			headers=sd_instance.headers,
 			cookies=sd_instance.cookies
 		)
@@ -400,14 +417,9 @@ class StableDiffusionAPI:
 		return StableDiffusionAPI._internal_request( requests.post, f'{sd_instance.url}{APIEndpoints.txt2img}', json=arguments, headers=sd_instance.headers, cookies=sd_instance.cookies )
 
 	@staticmethod
-	def get_sd_instance_operation_image( sd_instance : StableDiffusionInstance, operation_hash : str ) -> tuple[bool, Any]:
+	def get_sd_instance_operation_image( sd_instance : StableDiffusionInstance, hash_id : str, pop_value : bool = False ) -> tuple[bool, Any]:
 		'''
 		Get the stable diffusion instance's generated image for a given operation hash
 		'''
 		pass
 
-def update_sd_instances( instances : list[StableDiffusionInstance] ) -> None:
-	'''
-	Update all passed stable diffusion instances
-	'''
-	pass

@@ -69,6 +69,17 @@ class DistributorAPI:
 		return unavailable_instances
 
 	@staticmethod
+	def get_stable_diffusion_instance_infos( distributor : DistributorInstance ) -> list[dict]:
+		# refresh the instance informations
+		for instance in distributor.sd_instances:
+			StableDiffusionAPI.refresh_sd_instance_info( instance )
+		# pull all the information and return it
+		return [ {
+			"sys_info" : StableDiffusionAPI.get_sd_instance_system_info( instance )[1],
+			"sd_info" : StableDiffusionAPI.get_sd_instance_info( instance )[1]
+		} for instance in distributor.sd_instances ]
+
+	@staticmethod
 	def _internal_text2img( target_instance : StableDiffusionInstance, hash_id : str, parameters : dict ) -> None:
 		try:
 
@@ -102,7 +113,7 @@ class DistributorAPI:
 			print( data )
 
 	@staticmethod
-	def distribute_text2img( distributor : DistributorInstance, parameters : dict ) -> str | None:
+	def distribute_text2img( distributor : DistributorInstance, parameters : dict, forceIndex : int = None ) -> str | None:
 		hash_id : str = uuid4().hex
 
 		# see if we can send it to an instance that is idle!
@@ -111,8 +122,12 @@ class DistributorAPI:
 			# no idle instances, must queue it
 			available_instances = distributor.sd_instances
 
+		index = distributor.counter
+		if forceIndex != None:
+			index = min( max( forceIndex, 0 ), len(distributor.sd_instances) )
+
 		# queue it in the target instance
-		target_instance = available_instances[ distributor.counter ]
+		target_instance = available_instances[ index ]
 
 		# internally send the text2img request
 		target_instance.queue.append( hash_id )
@@ -120,62 +135,70 @@ class DistributorAPI:
 		t.start()
 
 		# increment the counter (and wrap it around)
-		distributor.counter += 1
-		if distributor.counter > len(distributor.sd_instances) - 1:
-			distributor.counter = 0
+		if forceIndex == None:
+			distributor.counter += 1
+			if distributor.counter > len(distributor.sd_instances) - 1:
+				distributor.counter = 0
 
 		# return hash to caller
 		return hash_id
 
 	@staticmethod
-	def is_hash_ready( distributor : DistributorInstance, hash_id : str ) -> int:
+	def get_hash_id_sd_instance( distributor : DistributorInstance, hash_id : str ) -> StableDiffusionInstance | None:
 		for instance in distributor.sd_instances:
-			# print( list(instance.images.keys()), instance.queue )
-			if instance.images.get( hash_id ) != None:
-				return OperationStatus.Finished
-			elif len(instance.queue) > 0 and instance.queue[0] == hash_id:
-				return OperationStatus.InProgress
-			elif array_find(instance.queue, hash_id ) != None:
-				return OperationStatus.InQueue
-		return OperationStatus.NonExistent
-
-	@staticmethod
-	def get_hash_id_image( distributor : DistributorInstance, hash_id : str, pop_cache : bool = False ) -> str | None:
-		for instance in distributor.sd_instances:
-			if instance.images.get( hash_id ) == None:
-				continue
-			if pop_cache: # pop it instead of just returning it
-				return instance.images.pop(hash_id)
-			return instance.images.get( hash_id )
+			if instance.images.get( hash_id ) != None or array_find(instance.queue, hash_id ) != None:
+				return instance
 		return None
 
 	@staticmethod
-	def get_operation_progress( distributor : DistributorInstance, hash_id : str ) -> dict | None:
-		if DistributorAPI.is_hash_ready( distributor, hash_id ) != OperationStatus.InProgress:
+	def get_hash_status( distributor : DistributorInstance, hash_id : str ) -> int:
+		# find the instance
+		instance = DistributorAPI.get_hash_id_sd_instance( distributor, hash_id )
+		if instance == None:
+			return OperationStatus.NonExistent
+		# determine the status
+		if instance.images.get( hash_id ) != None:
+			return OperationStatus.Finished
+		elif len(instance.queue) > 0 and instance.queue[0] == hash_id:
+			return OperationStatus.InProgress
+		return OperationStatus.InQueue
+
+	@staticmethod
+	def get_hash_id_image( distributor : DistributorInstance, hash_id : str, pop_cache : bool = False ) -> str | None:
+		instance = DistributorAPI.get_hash_id_sd_instance( distributor, hash_id )
+		if (instance == None) or (instance.images.get( hash_id ) == None):
 			return None
-		for instance in distributor.sd_instances:
-			if len(instance.queue) == 0 or instance.queue[0] != hash_id:
-				continue
-			# found the matching hash id that is in queue
-			success, err = StableDiffusionAPI.get_sd_instance_progress( instance )
-			if not success:
-				print('Get Operation Progress Error:')
-				print('Could not get the progress of the current image at ', instance.url)
-				print( err )
+		if pop_cache: # pop it instead of just returning it
+			return instance.images.pop(hash_id)
+		return instance.images.get( hash_id )
+
+	@staticmethod
+	def get_operation_progress( distributor : DistributorInstance, hash_id : str ) -> dict | None:
+		if DistributorAPI.get_hash_status( distributor, hash_id ) != OperationStatus.InProgress:
+			return None
+		instance = DistributorAPI.get_hash_id_sd_instance( distributor, hash_id )
+		if (instance == None) or (len(instance.queue) == 0) or (instance.queue[0] != hash_id):
+			return None
+		# found the matching hash id that is in queue
+		success, err = StableDiffusionAPI.get_sd_instance_progress( instance )
+		if success:
 			return err
+		print('Get Operation Progress Error:')
+		print('Could not get the progress of the current image at ', instance.url)
+		print( err )
 		return None
 
 	@staticmethod
 	def get_operation_queue_info( distributor : DistributorInstance, hash_id : str ) -> dict | None:
-		if DistributorAPI.is_hash_ready( distributor, hash_id ) != OperationStatus.InQueue:
+		if DistributorAPI.get_hash_status( distributor, hash_id ) != OperationStatus.InQueue:
 			return None
-		for instance in distributor.sd_instances:
-			if len(instance.queue) == 0 or array_find(instance.queue, hash_id):
-				continue
-			success, err = StableDiffusionAPI.get_sd_instance_queue_status( instance )
-			if not success:
-				print('Get Operation Queue States Error:')
-				print('Could not get the queue information of the stable diffusion instance at ', instance.url)
-				print( err )
+		instance = DistributorAPI.get_hash_id_sd_instance( distributor, hash_id )
+		if (instance == None) or (len(instance.queue) == 0) or (array_find(instance.queue, hash_id) == None):
+			return None
+		success, err = StableDiffusionAPI.get_sd_instance_queue_status( instance )
+		if success:
 			return err
+		print('Get Operation Queue States Error:')
+		print('Could not get the queue information of the stable diffusion instance at ', instance.url)
+		print( err )
 		return None

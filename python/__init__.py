@@ -6,10 +6,12 @@ import json
 from distributor import DistributorAPI, DistributorInstance, OperationStatus
 from stablediffusion import StableDiffusionAPI, StableDiffusionInstance
 from ccrypto import generate_random_key, aes_decrypt, aes_encrypt, encode_base64_hex, decode_base64_hex
-from network import SetupLocalHost, Ngrok, ThreadedServerResponder
+from network import ServerThreadWrapper, setup_local_host, Ngrok, ThreadedServerResponder
 from image import compress_image_complete, load_image_from_sd
 
 from PIL import Image
+from typing import Any
+from time import sleep
 
 def compress_str_transmission( value : str ) -> str:
 	return zlib.compress( bytes( value.replace(' ', '').strip(), encoding='utf-8' ), level=9 ).hex()
@@ -69,7 +71,7 @@ def local_distribute_test( ) -> None:
 	def get_state_str( state : OperationStatus ) -> str:
 		return state == OperationStatus.NonExistent and 'NonExistent' or state == OperationStatus.InQueue and 'InQueue' or state == OperationStatus.InProgress and 'InProgress' or 'Finished'
 
-	state = DistributorAPI.is_hash_ready( distributor, hash_id )
+	state = DistributorAPI.get_hash_status( distributor, hash_id )
 	print( state, get_state_str(state) )
 	assert state != OperationStatus.NonExistent, 'HashId does not exist in any stable diffusion instances.'
 
@@ -77,7 +79,7 @@ def local_distribute_test( ) -> None:
 
 	while state != OperationStatus.NonExistent and state != OperationStatus.Finished:
 		sleep(0.2)
-		state = DistributorAPI.is_hash_ready( distributor, hash_id )
+		state = DistributorAPI.get_hash_status( distributor, hash_id )
 		print( state, get_state_str(state) )
 		if state == OperationStatus.InProgress:
 			print( DistributorAPI.get_operation_progress( distributor, hash_id ) )
@@ -89,11 +91,100 @@ def local_distribute_test( ) -> None:
 	else:
 		print('Image failed to be generated.')
 
+def run_roblox_http_server( port : int = 500, sd_urls : list = [] ) -> ServerThreadWrapper:
+	print('Setting up stable diffusion instances:')
+	stable_diffusion_instances = [ StableDiffusionInstance(url=url) for url in sd_urls ]
+
+	print('Setting up distributor instance:')
+	distributor = DistributorInstance( sd_instances=stable_diffusion_instances )
+
+	none_working_instances = DistributorAPI.check_stable_diffusion_instances( distributor )
+	if len(none_working_instances) > 0:
+		print("Unavailable stable diffusion urls: ", *[ sd_inst.url for sd_inst in none_working_instances ])
+
+	def get_hash_image( distributor : DistributorInstance, hash_id : str ) -> str:
+		return prepare_compressed_image(
+			DistributorAPI.get_hash_id_image(
+				distributor,
+				hash_id,
+				pop_cache=True
+			)
+		)[1] # index 1 is the image data (index 0 is the size tuple)
+
+	def txt2img_wrapper( distributor : DistributorInstance, data : dict ) -> str:
+		return DistributorAPI.distribute_text2img(
+			distributor,
+			data.get('prompt'),
+			forceIndex=data.get('index')
+		)
+
+	ENDPOINTS = {
+		"get_sysinfo" : lambda _, __ : DistributorAPI.get_stable_diffusion_instance_infos( distributor ),
+		"get_hash_status" : lambda _, content : DistributorAPI.get_hash_status( distributor, content.get('data').get('hash') ),
+		"get_hash_progress" : lambda _, content : DistributorAPI.get_operation_progress( distributor, content.get('data').get('hash') ),
+		"get_hash_queue" : lambda _, content : DistributorAPI.get_operation_queue_info( distributor, content.get('data').get('hash') ),
+		"get_sd_infos" : lambda _, __ : DistributorAPI.get_stable_diffusion_instance_infos( distributor ),
+		"get_hash_image" : lambda _, content : get_hash_image( distributor, content.get('data').get('hash') ),
+		"post_txt2img" : lambda _, content : txt2img_wrapper( distributor, content.get('data') ),
+	}
+
+	def on_post( self : ThreadedServerResponder, _ : int, content : str ) -> tuple[int, Any]:
+		try:
+			content = json.loads(content)
+		except:
+			return 400, json.dumps({"message": "invalid json"})
+
+		command : str = content.get('command')
+		if command == None:
+			return 400, json.dumps({"message": "no command parameter"})
+
+		response_message = json.dumps({"message": "unknown command"})
+
+		callback = ENDPOINTS.get(command)
+		if callback != None:
+			response_message = json.dumps({ "data" : callback( self, content ) })
+
+		return 200, response_message
+
+	def on_get( _ : ThreadedServerResponder, __ : int, ___ : str ) -> tuple[int, Any]:
+		return 200, json.dumps({'message' : 'You cannot access this server using GET.'})
+
+	print("Webserver Started")
+	return setup_local_host( port=port, onGET=on_get, onPOST=on_post )
+
 if __name__ == '__main__':
 
-	from threading import Thread
+	# from threading import Thread
+	# t = Thread(target=local_distribute_test)
+	# t.start()
+	# t.join()
 
-	t = Thread(target=local_distribute_test)
-	t.start()
+	import requests
 
-	t.join()
+	webserver = run_roblox_http_server( port=500, sd_urls=['http://127.0.0.1:7861'] )
+
+	# Ngrok.set_port(webserver.webserver.server_port)
+	# Ngrok.open_tunnel()
+
+	# print("Ngrok Public Address: ", Ngrok.get_ngrok_addr())
+	# print("Set the server address to the ngrok public address.")
+
+	response = requests.post('http://127.0.0.1:500', json={
+		'command' : 'get_sysinfo',
+	})
+
+	with open('dump.json', 'w') as file:
+		file.write( json.dumps( response.json(), indent=4 ) )
+
+	# while True:
+	# 	try:
+	# 		sleep(1/60)
+	# 	except KeyboardInterrupt:
+	# 		break
+	# 	except Exception:
+	# 		break
+
+	# Ngrok.close_tunnel()
+	webserver.shutdown()
+
+	print("Webserver Closed")
