@@ -63,6 +63,14 @@ Module.zlib = require(script.zlib)
 Module.ActorPool = require(script.ActorPool)
 Module.ActorPool.SetTargetActorAmount( 16 )
 
+Module.HashStatusEnum = {
+	NonExistent = -1,
+	InQueue = 0,
+	InProgress = 1,
+	Finished = 2,
+	Errored = 3,
+}
+
 function Module.ToHex( value : string ) : string
 	return value:gsub('.', function(c)
 		return string.format('%02X', string.byte(c))
@@ -106,7 +114,7 @@ function Module.DecodePixels( data : string ) : table
 end
 
 function Module.PreprocessRowMatrix( pixels : table ) : table
-	return Module.ActorPool.DistributeCalculation( 'DecodePixelRow', pixels, false, true )
+	return Module.ActorPool.DistributeCalculation('DecodePixelRow', pixels, false, true)
 end
 
 function Module.DisplayTextForm( processedRows : table, gridFrame : Frame )

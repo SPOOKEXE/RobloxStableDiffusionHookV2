@@ -1,4 +1,5 @@
 
+import traceback
 import numpy
 import zlib
 import json
@@ -14,7 +15,7 @@ from typing import Any
 from time import sleep
 
 def compress_str_transmission( value : str ) -> str:
-	return zlib.compress( bytes( value.replace(' ', '').strip(), encoding='utf-8' ), level=9 ).hex()
+	return zlib.compress( bytes( value.strip(), encoding='utf-8' ), level=9 ).hex()
 
 def decompress_json_transmission( value : str ) -> dict:
 	return json.loads( zlib.decompress( bytes.fromhex( value ) ) )
@@ -24,9 +25,9 @@ def prepare_compressed_image( image_raw : str ) -> tuple:
 	image : Image.Image = load_image_from_sd( image_raw )
 	image.thumbnail((256,256))
 	# compress image
-	print( 'Preparing compressed image: ', image.size, len(str( numpy.array(image).tolist() ).replace(' ', '')) )
+	print( 'Preparing compressed image:', image.size, len(str( numpy.array(image).tolist() ).replace(' ', '')) )
 	size, color_pallete, encoded_pixels = compress_image_complete( image, round_n=5, min_usage_count=3 )
-	return size, compress_str_transmission( str(color_pallete) + "|" + str(encoded_pixels) )
+	return size, compress_str_transmission( (str(color_pallete) + "|" + str(encoded_pixels)).replace(' ', '') )
 
 def local_distribute_test( ) -> None:
 
@@ -102,29 +103,20 @@ def run_roblox_http_server( port : int = 500, sd_urls : list = [] ) -> ServerThr
 	if len(none_working_instances) > 0:
 		print("Unavailable stable diffusion urls: ", *[ sd_inst.url for sd_inst in none_working_instances ])
 
-	def get_hash_image( distributor : DistributorInstance, hash_id : str ) -> str:
-		return prepare_compressed_image(
-			DistributorAPI.get_hash_id_image(
-				distributor,
-				hash_id,
-				pop_cache=True
-			)
-		)[1] # index 1 is the image data (index 0 is the size tuple)
-
-	def txt2img_wrapper( distributor : DistributorInstance, data : dict ) -> str:
-		return DistributorAPI.distribute_text2img(
-			distributor,
-			data.get('prompt'),
-			forceIndex=data.get('index')
-		)
+	def get_hash_image( distributor : DistributorInstance, hash_id : str ) -> str | None:
+		img = DistributorAPI.get_hash_id_image( distributor, hash_id, pop_cache=True )
+		if img == None:
+			return None
+		# index 1 is the image data (index 0 is the size tuple which can be discarded)
+		return prepare_compressed_image( img )[1]
 
 	ENDPOINTS = {
 		"get_sd_instances" : lambda _, __ : DistributorAPI.get_stable_diffusion_instance_infos( distributor ),
-		"get_hash_status" : lambda _, content : DistributorAPI.get_hash_status( distributor, content.get('data').get('hash') ),
-		"get_hash_progress" : lambda _, content : DistributorAPI.get_operation_progress( distributor, content.get('data').get('hash') ),
-		"get_hash_queue" : lambda _, content : DistributorAPI.get_operation_queue_info( distributor, content.get('data').get('hash') ),
-		"get_hash_image" : lambda _, content : get_hash_image( distributor, content.get('data').get('hash') ),
-		"post_txt2img" : lambda _, content : txt2img_wrapper( distributor, content.get('data') ),
+		"get_hash_status" : lambda _, content : DistributorAPI.get_hash_status( distributor, content.get('hash') ),
+		"get_hash_progress" : lambda _, content : DistributorAPI.get_operation_progress( distributor, content.get('hash') ),
+		"get_hash_queue" : lambda _, content : DistributorAPI.get_operation_queue_info( distributor, content.get('hash') ),
+		"get_hash_image" : lambda _, content : get_hash_image( distributor, content.get('hash') ),
+		"post_txt2img" : lambda _, content : DistributorAPI.distribute_text2img( distributor, decompress_json_transmission( content.get('prompt') ), forceIndex=content.get('index') ),
 	}
 
 	def on_post( self : ThreadedServerResponder, _ : int, content : str ) -> tuple[int, Any]:
@@ -133,18 +125,24 @@ def run_roblox_http_server( port : int = 500, sd_urls : list = [] ) -> ServerThr
 		except:
 			return 400, json.dumps({"message": "invalid json"})
 
-		print(content)
-
 		command : str = content.get('command')
 		if command == None:
 			return 400, json.dumps({"message": "no command parameter"})
 
 		response_message = json.dumps({"message": "unknown command"})
-
 		callback = ENDPOINTS.get(command)
 		if callback != None:
-			response_message = json.dumps({ "message" : callback( self, content ) })
-
+			# print(content)
+			try:
+				value = callback( self, content )
+				# print(value)
+				response_message = json.dumps({
+					"data" : compress_str_transmission(json.dumps([value])) 
+				})
+			except Exception as exception:
+				print( 'Server Error: Failed to call ENDPOINT callback.' )
+				print( traceback.print_exception(exception) )
+				response_message = json.dumps({ "message" : 'server error: calling endpoint errored.' })
 		return 200, response_message
 
 	def on_get( _ : ThreadedServerResponder, __ : int, ___ : str ) -> tuple[int, Any]:
@@ -160,18 +158,18 @@ if __name__ == '__main__':
 	# t.start()
 	# t.join()
 
-	import requests
+	# import requests
 
 	webserver = run_roblox_http_server(
 		port=500,
-		sd_urls=['http://127.0.0.1:7861']
+		sd_urls=['http://127.0.0.1:7860']
 	)
 
-	Ngrok.set_port(webserver.webserver.server_port)
-	Ngrok.open_tunnel()
+	# Ngrok.set_port(webserver.webserver.server_port)
+	# Ngrok.open_tunnel()
 
-	print("Ngrok Public Address: ", Ngrok.get_ngrok_addr())
-	print("Set the server address to the ngrok public address.")
+	# print("Ngrok Public Address: ", Ngrok.get_ngrok_addr())
+	# print("Set the server address to the ngrok public address.")
 
 	# response = requests.post('http://127.0.0.1:500', json={
 	# 	'command' : 'get_sysinfo',
@@ -187,7 +185,7 @@ if __name__ == '__main__':
 		except Exception:
 			break
 
-	Ngrok.close_tunnel()
+	# Ngrok.close_tunnel()
 	webserver.shutdown()
 
 	print("Webserver Closed")

@@ -3,6 +3,7 @@ import requests
 
 from dataclasses import dataclass, field
 from typing import Any, Callable
+from time import time
 
 def pop_indexes( array : list, indexes : list ) -> None:
 	for idx in indexes:
@@ -31,6 +32,11 @@ class StableDiffusionInstance:
 	queue : list = field(default_factory=list)
 	errored_ids : list[str] = field(default_factory=list)
 	images : dict = field(default_factory=dict)
+
+	last_info_timestamp : int = 0
+	last_info : dict = field(default_factory=dict)
+	last_sysinfo_timestamp : int = 0
+	last_sysinfo : dict = field(default_factory=dict)
 
 	headers : dict = None
 	cookies : dict = None
@@ -124,6 +130,11 @@ class StableDiffusionAPI:
 		'''
 		Get the system information for the stable diffusion instance.
 		'''
+
+		timestamp = time()
+		if timestamp < sd_instance.last_sysinfo_timestamp:
+			return True, sd_instance.last_sysinfo
+
 		success, sys_info = StableDiffusionAPI._internal_request(
 			requests.get,
 			f'{sd_instance.url}{APIEndpoints.sysinfo}',
@@ -141,7 +152,8 @@ class StableDiffusionAPI:
 		if torch_info != None:
 			CPUINFO['name'] = torch_info['cpu_info'][8].split('=')[1].strip()
 
-		return True, {
+		sd_instance.last_sysinfo_timestamp = timestamp + 30 # 30 second interval
+		sd_instance.last_sysinfo = {
 			"OS" : torch_info != None and torch_info.get('os') or 'Unknown',
 			"RAM" : sys_info.get('RAM'),
 			"CPU" : CPUINFO,
@@ -151,6 +163,8 @@ class StableDiffusionAPI:
 			"CmdLineArgs" : sys_info.get('Commandline')[1:],
 			"Extensions" : [ ext.get('name') for ext in sys_info.get('Extensions') ],
 		}
+
+		return True, sd_instance.last_sysinfo
 
 	@staticmethod
 	def update_sd_instance_options( sd_instance : StableDiffusionInstance, options : dict ) -> tuple[bool, Any]:
@@ -214,6 +228,11 @@ class StableDiffusionAPI:
 		- Upscalers & Modes
 		- Samplers
 		'''
+
+		timestamp = time()
+		if timestamp < sd_instance.last_info_timestamp:
+			return True, sd_instance.last_info
+
 		base_info = {
 			"checkpoints" : None,
 			"hypernetworks" : None,
@@ -312,6 +331,8 @@ class StableDiffusionAPI:
 		else:
 			print('Failed to get samplers from the stable diffusion instance: ', value)
 
+		sd_instance.last_info_timestamp = timestamp + 30 # 30 second interval
+		sd_instance.last_info = base_info
 		return True, base_info
 
 	@staticmethod
@@ -407,6 +428,10 @@ class StableDiffusionAPI:
 
 	@staticmethod
 	def text2img( sd_instance : StableDiffusionInstance, arguments : dict ) -> tuple[bool, Any]:
+		'''
+		POST the text2image request to the stable diffusion instance.
+		Returns the values given back from the POST request to the instance.
+		'''
 		success, err = StableDiffusionAPI.update_sd_instance_options(sd_instance, {
 			'sd_model_checkpoint': arguments.get('checkpoint')
 		})
@@ -421,5 +446,4 @@ class StableDiffusionAPI:
 		'''
 		Get the stable diffusion instance's generated image for a given operation hash
 		'''
-		pass
-
+		return sd_instance.images.get( hash_id )
