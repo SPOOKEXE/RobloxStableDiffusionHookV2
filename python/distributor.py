@@ -34,7 +34,8 @@ def log_user_creation( user : str, data : dict, log_dir : str = "logs" ) -> None
 	with open( log_filepath, 'w' ) as file:
 		file.write( json.dumps({
 			"requestee" : user,
-			"info" : data.get('info') != None and json.loads( data.get('info') ) or None
+			"info" : data.get('info') != None and json.loads( data.get('info') ) or None,
+			"hash" : data.get('hash')
 		}, indent=4) + "\n" )
 
 	img_filepath = os.path.join( log_dir, user, f"{timestamp}.jpeg" )
@@ -98,6 +99,7 @@ class DistributorAPI:
 
 			if userName != None:
 				try:
+					data['hash_id'] = hash_id
 					log_user_creation( userName, data )
 				except Exception as exception:
 					print('Failed to log user prompt: ')
@@ -123,6 +125,7 @@ class DistributorAPI:
 			return False, 'ForceIndex must be an integer or None.'
 
 		hash_id : str = uuid4().hex
+		print('New hash for txt2img prompt: ', hash_id)
 
 		# see if we can send it to an instance that is idle!
 		available_instances = [ instance for instance in distributor.sd_instances if instance.busy == False ]

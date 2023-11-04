@@ -109,12 +109,26 @@ function Module.PreparePixelBoard( surfaceGui : SurfaceGui, size_x : number?, si
 	return GridFrame
 end
 
-function Module.DecodePixels( data : string ) : table
-	return HttpService:JSONDecode( Module.zlib.Zlib.Decompress(data) )
+function Module.DecodePixels( data : string ) : (table, table)
+	local Decompressed = Module.zlib.Zlib.Decompress( Module.FromHex(data) )
+	local Pallete, Pixels = string.split(Decompressed, '|')
+	Pallete = HttpService:JSONDecode( Pallete )
+	Pixels = HttpService:JSONDecode( Pixels )
+
+	local Arguments = { }
+	for _, row in ipairs( Pixels ) do
+		table.insert(Arguments, {Pallete, row})
+	end
+	return Module.ActorPool.DistributeCalculation( 'DecodeRow', Arguments, false, true )
 end
 
-function Module.PreprocessRowMatrix( pixels : table ) : table
-	return Module.ActorPool.DistributeCalculation('DecodePixelRow', pixels, false, true)
+function Module.PixelifyRow( pixels : table, width : number? ) : table
+	width = width or DEFAULT_WIDTH
+	local Arguments = { }
+	for _, row in ipairs( pixels ) do
+		table.insert(Arguments, { row, basePixelText, Character, width })
+	end
+	return Module.ActorPool.DistributeCalculation( 'PixelifyRow', Arguments, false, true )
 end
 
 function Module.DisplayTextForm( processedRows : table, gridFrame : Frame )
