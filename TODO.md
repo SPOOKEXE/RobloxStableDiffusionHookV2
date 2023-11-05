@@ -6,6 +6,7 @@
 - [✓] prompt widget
 - [✓] requests to python server (NGROK)
 - [✓] encrypt prompt information being sent from local scripts to server script
+- [✓] use actors to speed up processing
 
 ### [✓] Python:
 - [✓] stable diffusion direct api
@@ -16,10 +17,11 @@
 - [✓] progress updating api + client
 
 Additional Functionality:
-- [✗] have a monitor for each player and setup queue system
-- [✗] ability to clear the board locally
-- [✗] use actors to speed up processing
-- [✗] 512x512 image in roblox? (or optional scaling)
+- [✗] have individual TVs for each player (and have them disabled by default)
+- [✗] have a shared TV for the server
+- [✗] ability to clear the board locally (individual tv and server tv)
+- [✗] ability to disable loading on other individual boards and the server board
+- [✗] 512x512 image in roblox? (split each label into two pieces for each row)
 
 ----
 [✓] [✗]
