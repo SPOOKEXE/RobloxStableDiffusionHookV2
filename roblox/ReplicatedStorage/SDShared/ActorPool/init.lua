@@ -167,7 +167,7 @@ function Module.DistributeCalculation(
 
 	local connection; connection = InboundBind.Event:Connect(function(UUID : string, resultIndex : number, success : boolean, results : any?)
 		if success then
-			Results[ resultIndex ] = results
+			Results[ resultIndex ] = #results == 1 and results[1] or results
 		else
 			warn('Failed to run command on actor: ' .. tostring( results[1] ) )
 		end

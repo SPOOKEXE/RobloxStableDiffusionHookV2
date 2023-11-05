@@ -26,27 +26,20 @@ local TemplateGridFrame = Instance.new('Frame') do
 	GridLayout.Parent = TemplateGridFrame
 end
 
-local TemplatePixelLabel = Instance.new('Frame') do
-	TemplatePixelLabel.Name = 'TemplateFrame'
-	TemplatePixelLabel.BackgroundTransparency = 1
-	TemplatePixelLabel.Size = UDim2.new(1, 0, 0, 20)
-	TemplatePixelLabel.ClipsDescendants = false
-	local Label = Instance.new('TextLabel')
-	Label.Name = 'Label'
-	Label.BackgroundTransparency = 1
-	Label.Size = UDim2.fromScale(1, 1)
-	Label.FontFace = Font.new('rbxasset://fonts/families/SourceSansPro.json', Enum.FontWeight.Bold)
-	Label.Text = ''
-	Label.RichText = true
-	Label.TextColor3 = Color3.new(1,1,1)
-	Label.TextScaled = false
-	Label.TextSize = 26
-	--Label.TextWrapped = false
-	Label.TextXAlignment = Enum.TextXAlignment.Center
-	Label.TextYAlignment = Enum.TextYAlignment.Center
-	Label.ClipsDescendants = false
-	Label.Parent = TemplatePixelLabel
-end
+local TemplateLabel = Instance.new('TextLabel')
+TemplateLabel.Name = 'Label'
+TemplateLabel.BackgroundTransparency = 1
+TemplateLabel.FontFace = Font.new('rbxasset://fonts/families/SourceSansPro.json', Enum.FontWeight.Bold)
+TemplateLabel.Text = ''
+TemplateLabel.RichText = true
+TemplateLabel.AutoLocalize = false
+TemplateLabel.TextColor3 = Color3.new(1,1,1)
+TemplateLabel.TextScaled = false
+TemplateLabel.TextSize = 26
+TemplateLabel.Size = UDim2.new(1, 0, 0, 20)
+TemplateLabel.TextXAlignment = Enum.TextXAlignment.Center
+TemplateLabel.TextYAlignment = Enum.TextYAlignment.Center
+TemplateLabel.ClipsDescendants = false
 
 local function CreateRandomPixels(noPixels)
 	local pixels = {}
@@ -61,7 +54,7 @@ local Module = {}
 
 Module.zlib = require(script.zlib)
 Module.ActorPool = require(script.ActorPool)
-Module.ActorPool.SetTargetActorAmount( 16 )
+Module.ActorPool.SetTargetActorAmount( 64 ) -- set to some amount
 
 Module.HashStatusEnum = {
 	NonExistent = -1,
@@ -93,49 +86,43 @@ function Module.PreparePixelBoard( surfaceGui : SurfaceGui, size_x : number?, si
 		return existantFrame
 	end
 
-	surfaceGui.AlwaysOnTop = false
+	surfaceGui.AlwaysOnTop = true
 	surfaceGui.MaxDistance = 100
 
 	local blackText = string.format(basePixelText, 0, 0, 0, string.rep(Character, size_x))
 	local GridFrame = TemplateGridFrame:Clone()
 	for index = 1, size_y do -- each row
-		local Frame = TemplatePixelLabel:Clone()
-		Frame.Name = index
-		Frame.LayoutOrder = index
-		Frame.Label.Text = blackText
-		Frame.Parent = GridFrame
+		local Label = TemplateLabel:Clone()
+		Label.Name = index
+		Label.LayoutOrder = index
+		Label.Text = blackText
+		Label.Parent = GridFrame
 	end
 	GridFrame.Parent = surfaceGui
 	return GridFrame
 end
 
-function Module.DecodePixels( data : string ) : (table, table)
+function Module.DecodePixelsAndPixelify( data : string, width : number? ) : (table, table)
 	local Decompressed = Module.zlib.Zlib.Decompress( Module.FromHex(data) )
-	local Pallete, Pixels = string.split(Decompressed, '|')
-	Pallete = HttpService:JSONDecode( Pallete )
-	Pixels = HttpService:JSONDecode( Pixels )
+	local Pallete, Pixels = unpack(string.split(Decompressed, '|'))
+	Pallete = HttpService:JSONDecode( string.gsub(Pallete, "'", '"') )
+	Pixels = HttpService:JSONDecode( string.gsub(Pixels, "'", '"') )
 
+	width = width or DEFAULT_WIDTH
+
+	-- decode and pixelify each row (utilizing actors)
 	local Arguments = { }
 	for _, row in ipairs( Pixels ) do
-		table.insert(Arguments, {Pallete, row})
+		table.insert( Arguments, {Pallete, row, basePixelText, Character, width} )
 	end
-	return Module.ActorPool.DistributeCalculation( 'DecodeRow', Arguments, false, true )
+	return Module.ActorPool.DistributeCalculation( 'DecodePixelsAndPixelify', Arguments, false, true )
 end
 
-function Module.PixelifyRow( pixels : table, width : number? ) : table
-	width = width or DEFAULT_WIDTH
-	local Arguments = { }
-	for _, row in ipairs( pixels ) do
-		table.insert(Arguments, { row, basePixelText, Character, width })
-	end
-	return Module.ActorPool.DistributeCalculation( 'PixelifyRow', Arguments, false, true )
-end
-
-function Module.DisplayTextForm( processedRows : table, gridFrame : Frame )
-	for rowIndex, pixelText in ipairs( processedRows ) do
-		local rowFrame = gridFrame:FindFirstChild(rowIndex)
-		if rowFrame then
-			rowFrame.Label.Text = pixelText
+function Module.DisplayTextForm( processedPixels : table, gridFrame : Frame )
+	for rowIndex, pixelText in ipairs( processedPixels ) do
+		local rowLabel = gridFrame:FindFirstChild(rowIndex)
+		if rowLabel then
+			rowLabel.Text = pixelText
 		end
 	end
 end
@@ -152,9 +139,9 @@ function Module.ClearPixelsOnBoard( frame : Frame, width : number? )
 	width = width or DEFAULT_WIDTH
 
 	local blankText = string.format(basePixelText, 0, 0, 0, string.rep(Character, width))
-	for _, Frame in ipairs( frame:GetChildren() ) do
-		if Frame:IsA('Frame') then
-			Frame.Label.Text = blankText
+	for _, Label in ipairs( frame:GetChildren() ) do
+		if Label:IsA('TextLabel') then
+			Label.Text = blankText
 		end
 	end
 end

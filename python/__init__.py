@@ -20,10 +20,10 @@ def compress_str_transmission( value : str ) -> str:
 def decompress_json_transmission( value : str ) -> dict:
 	return json.loads( zlib.decompress( bytes.fromhex( value ) ) )
 
-def prepare_compressed_image( image_raw : str ) -> tuple:
+def prepare_compressed_image( image_raw : str, image_size : tuple = (256,256) ) -> tuple:
 	# load to image and reduce size
 	image : Image.Image = load_image_from_sd( image_raw )
-	image.thumbnail((256,256))
+	image.thumbnail(image_size)
 	# compress image
 	print( 'Preparing compressed image:', image.size, len(str( numpy.array(image).tolist() ).replace(' ', '')) )
 	size, color_pallete, encoded_pixels = compress_image_complete( image, round_n=5, min_usage_count=3 )
@@ -35,12 +35,11 @@ def local_distribute_test( ) -> None:
 
 	print('Setting up stable diffusion instances:')
 	stable_diffusion_instances = [
-		StableDiffusionInstance(url='http://127.0.0.1:7861')
+		StableDiffusionInstance(url='http://127.0.0.1:7860')
 	]
 
 	print('Setting up distributor instance:')
 	distributor = DistributorInstance(sd_instances=stable_diffusion_instances)
-
 	none_working_instances = DistributorAPI.check_stable_diffusion_instances( distributor )
 	if len(none_working_instances) > 0:
 		print("Unavailable stable diffusion urls: ", *[ sd_inst.url for sd_inst in none_working_instances ])
