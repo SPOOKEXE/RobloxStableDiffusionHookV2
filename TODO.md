@@ -22,6 +22,8 @@ Additional Functionality:
 - [✗] ability to clear the board locally (individual tv and server tv)
 - [✗] ability to disable loading on other individual boards and the server board
 - [✗] 512x512 image in roblox? (split each label into two pieces for each row)
+- [✗] new ui for the stable diffusion widget (prompt widget & queue widget)
+- [✗] a progress bar for the multi-thread actor calculation instead of prints
 
 ----
 [✓] [✗]
