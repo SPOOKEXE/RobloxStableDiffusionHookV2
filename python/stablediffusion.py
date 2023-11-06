@@ -142,24 +142,29 @@ class StableDiffusionAPI:
 			cookies=sd_instance.cookies
 		)
 
-		if success == False:
+		if (success == False) or (type(sys_info) != dict):
 			return False, sys_info
 
 		torch_info = sys_info.get('Torch env info')
-		CPUINFO = sys_info.get('CPU')
-		if CPUINFO != None:
-			CPUINFO.pop('model')
-		if torch_info != None:
-			CPUINFO['name'] = torch_info['cpu_info'][8].split('=')[1].strip()
+		if type(torch_info) == dict:
+			CPUINFO = sys_info.get('CPU')
+			if CPUINFO != None:
+				CPUINFO.pop('model')
+			try:
+				CPUINFO['name'] = torch_info['cpu_info'][8].split('=')[1].strip()
+			except:
+				CPUINFO['name'] = 'unknown'
+		else:
+			CPUINFO = "unknown"
 
 		sd_instance.last_sysinfo_timestamp = timestamp + 30 # 30 second interval
 		sd_instance.last_sysinfo = {
-			"OS" : torch_info != None and torch_info.get('os') or 'Unknown',
+			"OS" : type(torch_info) == dict and torch_info.get('os') or 'Unknown',
 			"RAM" : sys_info.get('RAM'),
 			"CPU" : CPUINFO,
-			"GPUs" : torch_info != None and torch_info.get('nvidia_gpu_models') or None,
-			"PythonVersion" : torch_info != None and torch_info.get('python_version').split(' ')[0] or None,
-			"TorchVersion" : torch_info != None and torch_info.get('torch_version') or None,
+			"GPUs" : type(torch_info) == dict and torch_info.get('nvidia_gpu_models') or None,
+			"PythonVersion" : type(torch_info) == dict and torch_info.get('python_version').split(' ')[0] or None,
+			"TorchVersion" : type(torch_info) == dict and torch_info.get('torch_version') or None,
 			"CmdLineArgs" : sys_info.get('Commandline')[1:],
 			"Extensions" : [ ext.get('name') for ext in sys_info.get('Extensions') ],
 		}

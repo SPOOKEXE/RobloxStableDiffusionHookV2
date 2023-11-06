@@ -11,30 +11,6 @@ local StableDiffusionShared = require(ReplicatedStorage:WaitForChild('SDShared')
 local _, data = StableDiffusionServer.GetSDInstances()
 print(data and HttpService:JSONEncode(data) or 'SD Unavailable')
 
---[[]]
-local image = StableDiffusionServer.AwaitText2Image(
-	'SPOOK_EXE',
-
-	'v1-5-pruned-emaonly.safetensors [6ce0161689]',
-	{ },
-	{ },
-	{ },
-	'waterfall landscape',
-	'',
-	'Euler a',
-	25,
-	7,
-	1024,
-	512,
-	-1
-)
-
---[[
-	local custom_hash_id = '200dfae229e14cf1b7dab4421fab2a33'
-	local _, image = StableDiffusionServer.GetHashImage(custom_hash_id)
-	print(string.sub(image,1,100))
-]]
-
 local RenderPart = Instance.new('Part')
 RenderPart.Name = 'RenderPart'
 RenderPart.CanCollide = false
@@ -59,6 +35,30 @@ SurfaceGui.ResetOnSpawn = false
 SurfaceGui.PixelsPerStud = 256
 SurfaceGui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
 SurfaceGui.Parent = RenderPart
+
+--[[]]
+local image = StableDiffusionServer.AwaitText2Image(
+	'SPOOK_EXE',
+
+	'v1-5-pruned-emaonly.safetensors [6ce0161689]',
+	{ },
+	{ },
+	{ },
+	'waterfall landscape',
+	'',
+	'Euler a',
+	25,
+	7,
+	1024,
+	512,
+	-1
+)
+
+--[[
+	local custom_hash_id = 'f962bbc0e9ae466c9ffb7aef22a7d100'
+	local _, image = StableDiffusionServer.GetHashImage(custom_hash_id)
+	print(string.sub(image,1,100))
+]]
 
 local IMG_SIZE = 256
 
