@@ -39,17 +39,16 @@ SurfaceGui.Parent = RenderPart
 --[[]]
 local image = StableDiffusionServer.AwaitText2Image(
 	'SPOOK_EXE',
-
 	'v1-5-pruned-emaonly.safetensors [6ce0161689]',
 	{ },
 	{ },
 	{ },
-	'waterfall landscape',
+	'pug',
 	'',
 	'Euler a',
 	25,
 	7,
-	1024,
+	512,
 	512,
 	-1
 )
