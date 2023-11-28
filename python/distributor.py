@@ -26,20 +26,22 @@ def silent_pop_value( array : list, value : Any ) -> None:
 	except:
 		pass
 
-def log_user_creation( user : str, data : dict, log_dir : str = "logs" ) -> None:
-	os.makedirs( os.path.join( log_dir, user), exist_ok=True )
+def log_user_creation( user : str, userId : int, data : dict, log_dir : str = "logs" ) -> None:
+	os.makedirs( os.path.join( log_dir, str(userId)), exist_ok=True )
 
 	timestamp = str(floor(time()))
-	log_filepath = os.path.join( log_dir, user, f"{timestamp}.txt" )
+	log_filepath = os.path.join( log_dir, str(userId), f"{timestamp}.txt" )
 	with open( log_filepath, 'w' ) as file:
 		file.write( json.dumps({
 			"requestee" : user,
+			"requestee_id" : userId,
 			"info" : data.get('info') != None and json.loads( data.get('info') ) or None,
 			"hash" : data.get('hash')
 		}, indent=4) + "\n" )
 
-	img_filepath = os.path.join( log_dir, user, f"{timestamp}.jpeg" )
-	load_image_from_sd( data['images'][0] ).save( img_filepath )
+	for index, img in enumerate(data['images']):
+		img_filepath = os.path.join( log_dir, str(userId), f"{timestamp}_{index}.jpeg" )
+		load_image_from_sd( img ).save( img_filepath )
 
 class OperationStatus(Enum):
 	NonExistent = -1
@@ -88,19 +90,20 @@ class DistributorAPI:
 			# pop first because stable diffusion does not take the 'username' param
 			try:
 				userName = parameters.pop('username')
+				userId = parameters.pop('userid')
 			except:
 				pass
 
 			success, data = StableDiffusionAPI.text2img( target_instance, parameters )
 
 			# print(list(data.keys()))
-			# TODO: support multiple images (batch_size / batch_count)?
+			# TODO: support multiple images (batch_size / batch_count) (for VIPs)?
 			image = data['images'][0]
 
-			if userName != None:
+			if userName != None and userId != None:
 				try:
 					data['hash_id'] = hash_id
-					log_user_creation( userName, data )
+					log_user_creation( userName, userId, data )
 				except Exception as exception:
 					print('Failed to log user prompt: ')
 					print( str(exception) )

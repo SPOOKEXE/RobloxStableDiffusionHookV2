@@ -54,7 +54,7 @@ local Module = {}
 
 Module.zlib = require(script.zlib)
 Module.ActorPool = require(script.ActorPool)
-Module.ActorPool.SetTargetActorAmount( 64 ) -- set to some amount
+Module.ActorPool.SetTargetActorAmount( 128 ) -- set to some amount
 
 Module.HashStatusEnum = {
 	NonExistent = -1,

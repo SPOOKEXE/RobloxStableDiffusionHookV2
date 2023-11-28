@@ -102,6 +102,7 @@ end
 ]]
 function Module.Text2Image(
 	username : string?,
+	userid : number?,
 
 	checkpoint : string,
 	textual_inversions : { table }, -- { name, weight }
@@ -123,6 +124,7 @@ function Module.Text2Image(
 ) : (boolean, string?)
 
 	typeAssert('username', username, 'string', 'nil')
+	typeAssert('userid', userid, 'number', 'nil')
 	typeAssert('checkpoint', checkpoint, 'string')
 	typeAssert('textual_inversions', textual_inversions, 'table')
 	typeAssert('hypernetworks', hypernetworks, 'table')
@@ -136,7 +138,7 @@ function Module.Text2Image(
 	typeAssert('height', height, 'number')
 	-- typeAssert('batch_count', batch_count, 'number')
 	-- typeAssert('batch_size', batch_size, 'number')
-	typeAssert('seed', seed, 'number')
+	typeAssert('seed', seed, 'number', 'nil')
 
 	local HYPERNETWORK_BASE = '<hypernetwork:%s:%s>'
 	local LORA_BASE = '<lora:%s:%s>'
@@ -162,6 +164,7 @@ function Module.Text2Image(
 	-- construction of prompt
 	local ConstructedPrompt = {
 		username = username,
+		userid = userid,
 
 		checkpoint = checkpoint,
 
@@ -181,7 +184,9 @@ function Module.Text2Image(
 
 	-- prompt compression
 	local compressedPrompt = StableDiffusionShared.ToHex(
-		StableDiffusionShared.zlib.Zlib.Compress(HttpService:JSONEncode(ConstructedPrompt))
+		StableDiffusionShared.zlib.Zlib.Compress(
+			HttpService:JSONEncode(ConstructedPrompt)
+		)
 	)
 
 	-- POST to server
@@ -207,6 +212,7 @@ end
 ]]
 function Module.AwaitText2Image(
 	username : string?,
+	userid : number?,
 	checkpoint : string,
 	textual_inversions : { table }, -- { name, weight }
 	hypernetworks : { table }, -- { name, weight }
@@ -225,6 +231,7 @@ function Module.AwaitText2Image(
 
 	local success, hashId = Module.Text2Image(
 		username,
+		userid,
 		checkpoint,
 		textual_inversions, -- { name, weight }
 		hypernetworks, -- { name, weight }

@@ -102,12 +102,12 @@ def run_roblox_http_server( port : int = 500, sd_urls : list = [] ) -> ServerThr
 	if len(none_working_instances) > 0:
 		print("Unavailable stable diffusion urls: ", *[ sd_inst.url for sd_inst in none_working_instances ])
 
-	def get_hash_image( distributor : DistributorInstance, hash_id : str ) -> str | None:
+	def get_hash_image( distributor : DistributorInstance, hash_id : str, img_size : tuple = (256,256) ) -> str | None:
 		img = DistributorAPI.get_hash_id_image( distributor, hash_id ) #, pop_cache=True )
 		if img == None:
 			return None
 		# index 1 is the image data (index 0 is the size tuple which can be discarded)
-		return prepare_compressed_image( img )[1]
+		return prepare_compressed_image( img, image_size=img_size )[1]
 
 	ENDPOINTS = {
 		"get_sd_instances" : lambda _, __ : DistributorAPI.get_stable_diffusion_instance_infos( distributor ),
