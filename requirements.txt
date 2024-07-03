@@ -1,0 +1,8 @@
+fastapi
+numpy
+pillow
+pydantic
+pyngrok
+python-multipart
+requests
+# pycryptodomex

@@ -2,3 +2,5 @@
 *.jpeg
 *.pyc
 /logs/
+
+/.venv/
