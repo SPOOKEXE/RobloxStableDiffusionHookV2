@@ -1,175 +1,19 @@
 
 import requests
 
-from dataclasses import dataclass, field
 from typing import Any, Callable
 from time import time
+from enum import Enum
 
-def pop_indexes( array : list, indexes : list ) -> None:
+def pop_indexes( d : dict, indexes : list ) -> None:
 	for idx in indexes:
-		try:
-			array.pop(idx)
-		except:
-			pass
-
-def get_shortened_path( path : str ) -> str:
-	return "\\".join( path.split('\\')[-3:] )
-
-@dataclass
-class StableDiffusionInstance:
-	'''
-	A stable diffusion instance:
-	- url > the url to the stable diffusion webui?
-	- queue > the operation hash queue?
-	- busy > is the instance busy with a generation operation?
-	- images > all the images cached for the given instance
-	----
-	- headers > the headers passed for requests to the instance
-	- cookies > the cookies passed for requests to the instance
-	'''
-	url : str = None
-	busy : bool = False
-	queue : list = field(default_factory=list)
-	errored_ids : list[str] = field(default_factory=list)
-	images : dict = field(default_factory=dict)
-
-	last_info_timestamp : int = 0
-	last_info : dict = field(default_factory=dict)
-	last_sysinfo_timestamp : int = 0
-	last_sysinfo : dict = field(default_factory=dict)
-
-	headers : dict = None
-	cookies : dict = None
-
-class APIErrorMessages:
-	'''
-	Error messages for the stable diffusion api
-	'''
-	connection_error = 'Connection Error - Could not connect to the stable diffusion instance: {}'
-	server_error = 'Server Error: Could not connect to the stable diffusion instance: {}'
-
-class APIEndpoints:
-	'''
-	Endpoints for the Stable Diffusion WebUI API
-	'''
-	sysinfo = '/internal/sysinfo'
-	ping = '/internal/ping'
-	queue_status = '/queue/status'
-	progress = '/sdapi/v1/progress?skip_current_image=false'
-	options = '/sdapi/v1/options'
-	txt2img = '/sdapi/v1/txt2img'
-	skip = '/sdapi/v1/skip'
-	interrupt = '/sdapi/v1/interrupt'
-	memory = '/sdapi/v1/memory'
-
-	refresh_checkpoints = '/sdapi/v1/refresh-checkpoints'
-	refresh_vae = '/sdapi/v1/refresh-vae' # do along with checkpoints
-	refresh_loras = '/sdapi/v1/refresh-loras' # embeddings, hypernetworks, loras
-
-	get_checkpoints = '/sdapi/v1/sd-models'
-	get_hypernetworks = '/sdapi/v1/hypernetworks'
-	get_embeddings = '/sdapi/v1/embeddings'
-	get_loras = '/sdapi/v1/loras'
-	get_samplers = '/sdapi/v1/samplers'
-	get_upscalers = '/sdapi/v1/upscalers'
-	get_upscaler_modes = '/sdapi/v1/latent-upscale-modes'
-
-	reload_active_checkpoint = '/sdapi/v1/reload-checkpoint'
-	unload_active_checkpoint = '/sdapi/v1/unload-checkpoint'
+		if idx in d:
+			d.pop(idx)
 
 class StableDiffusionAPI:
 	'''
 	The core api to access a stable diffusion webui instance utilizing the stable diffusion instance class.
 	'''
-
-	@staticmethod
-	def _internal_request(
-		func : Callable[[str], tuple[bool, Any]],
-		url : str,
-		json : dict = None,
-		headers : dict = None,
-		cookies : dict = None
-	) -> tuple[bool, Any]:
-		'''
-		Internal request method for the stable diffusion api:
-		- requests.get
-		- requests.post
-		- requests.options
-		- requests.patch
-		- requests.delete
-		- requests.put
-		'''
-		try:
-			response : requests.Response = func( url, json=json, headers=headers, cookies=cookies, stream=False )
-			return True, response.json()
-		except requests.ConnectionError as exception:
-			print( APIErrorMessages.connection_error.format( url ) )
-			print( exception )
-			return False, APIErrorMessages.connection_error.format( url )
-		except Exception as exception:
-			print( APIErrorMessages.server_error.format( url ) )
-			print( exception )
-			return False, APIErrorMessages.server_error.format( url )
-
-	@staticmethod
-	def is_sd_instance_online( sd_instance : StableDiffusionInstance ) -> bool:
-		'''
-		Check if the stable diffusion instance is online.
-		'''
-		assert sd_instance.url != None, 'The url for the stable diffusion instance has not been set.'
-		success, _ = StableDiffusionAPI._internal_request(
-			requests.get,
-			f'{sd_instance.url}{APIEndpoints.ping}',
-			headers=sd_instance.headers,
-			cookies=sd_instance.cookies
-		)
-		return success
-
-	@staticmethod
-	def get_sd_instance_system_info( sd_instance : StableDiffusionInstance ) -> tuple[bool, Any]:
-		'''
-		Get the system information for the stable diffusion instance.
-		'''
-
-		timestamp = time()
-		if timestamp < sd_instance.last_sysinfo_timestamp:
-			return True, sd_instance.last_sysinfo
-
-		success, sys_info = StableDiffusionAPI._internal_request(
-			requests.get,
-			f'{sd_instance.url}{APIEndpoints.sysinfo}',
-			headers=sd_instance.headers,
-			cookies=sd_instance.cookies
-		)
-
-		if (success == False) or (type(sys_info) != dict):
-			return False, sys_info
-
-		torch_info = sys_info.get('Torch env info')
-		if type(torch_info) == dict:
-			CPUINFO = sys_info.get('CPU')
-			if CPUINFO != None:
-				CPUINFO.pop('model')
-			try:
-				CPUINFO['name'] = torch_info['cpu_info'][8].split('=')[1].strip()
-			except:
-				CPUINFO['name'] = 'unknown'
-		else:
-			CPUINFO = "unknown"
-
-		sd_instance.last_sysinfo_timestamp = timestamp + 30 # 30 second interval
-		sd_instance.last_sysinfo = {
-			"OS" : type(torch_info) == dict and torch_info.get('os') or 'Unknown',
-			"RAM" : sys_info.get('RAM'),
-			"CPU" : CPUINFO,
-			"GPUs" : type(torch_info) == dict and torch_info.get('nvidia_gpu_models') or None,
-			"PythonVersion" : type(torch_info) == dict and torch_info.get('python_version').split(' ')[0] or None,
-			"TorchVersion" : type(torch_info) == dict and torch_info.get('torch_version') or None,
-			"CmdLineArgs" : sys_info.get('Commandline')[1:],
-			"Extensions" : [ ext.get('name') for ext in sys_info.get('Extensions') ],
-		}
-
-		return True, sd_instance.last_sysinfo
 
 	@staticmethod
 	def update_sd_instance_options( sd_instance : StableDiffusionInstance, options : dict ) -> tuple[bool, Any]:
