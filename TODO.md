@@ -18,6 +18,7 @@
 - [✗] image compression
 - [✗] preset image sizes
 - [✗] python fastapi server (NGROK, LOCAL_HOST)
+- [✗] obfuscated fastapi mapping (get_sd_instances = 0, get_hash_status = 1, get_hash_progress = 2, get_hash_queue = 3, get_hash_image = 4, post_txt2img = 5)
 - [✗] logging prompts in python (player name, player id, timestamp, prompt, models, image) into folder.
 - [✗] multi stable diffusion distributor system (round-robin)
 - [✗] operation asynchronous api - progress updates api
