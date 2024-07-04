@@ -1,9 +1,10 @@
 
-import json
 from uuid import uuid4
 from pydantic import BaseModel, Field
 from typing import Union
+from enum import Enum
 
+import json
 import datetime
 import asyncio
 import aiohttp
@@ -23,6 +24,11 @@ ASPECT_RATIO_MAP : dict[str, tuple[int, int]] = {
 
 def tztimestamp() -> str:
 	return str(datetime.datetime.now(datetime.timezone.utc)).replace(' ', 'T', 1).replace('+00:00', 'Z')
+
+def pop_indexes( value : dict, indexes : list[str] ) -> None:
+	for index in indexes:
+		if index in value:
+			value.pop(index)
 
 class APIEndpoints:
 	'''Endpoints for the Stable Diffusion WebUI API'''
@@ -48,32 +54,35 @@ class APIEndpoints:
 	get_upscalers = '/sdapi/v1/upscalers'
 	get_upscaler_modes = '/sdapi/v1/latent-upscale-modes'
 
-	reload_active_checkpoint = '/sdapi/v1/reload-checkpoint'
 	unload_active_checkpoint = '/sdapi/v1/unload-checkpoint'
 
-class SDImage(BaseModel):
-	'''A Generated Stable Diffusion Image.'''
-	size : str
-	data : str
+class APIErrors:
+	INSTANCE_NOT_AVAILABLE = "Stable Diffusion Instance is not available - failed to connect."
+	JSON_DECODE_FAIL = "Failed to JSON decode response from Stable Diffusion Instance."
 
-class SDItem(BaseModel):
-	'''An item in queue for generation.'''
-	uuid : str = Field(default_factory=lambda : uuid4().hex)
-	error : str = Field(None)
-	completed : bool = Field(False)
-	generating : bool = Field(False)
-	canceled : bool = Field(False)
-	images : dict[str, SDImage] = Field(default_factory=dict)
-	timestamp : str = Field(default_factory=tztimestamp)
+class SDTxt2ImgParams(BaseModel):
+	checkpoint : str
+
+	prompt : str
+	negative : str
+
+	steps : int = Field(25)
+	cfg_scale : float = Field(7.0)
+	sampler_name : str = Field('Eular a')
+
+	width : int = Field(512)
+	height : int = Field(512)
+	seed : int = Field(-1)
+
+	# batch_size : int = Field(1)
+	# n_iter : int = Field(1)
 
 class StableDiffusionAPI:
 	endpoint : str
 	busy : bool
-	queue : list[SDItem]
-	results : dict[str, SDItem]
 
 	next_info_timestamp : int
-	sdinfo : dict
+	instance_info : dict
 	next_sysinfo_timestamp : int
 	sysinfo : dict
 
@@ -83,13 +92,11 @@ class StableDiffusionAPI:
 	def __init__( self, endpoint : str ) -> None:
 		self.endpoint = endpoint
 		self.busy = False
-		self.queue = list()
-		self.results = dict()
 
 		self.next_info_timestamp = -1
-		self.last_info = None
+		self.instance_info = None
 		self.next_sysinfo_timestamp = -1
-		self.last_sysinfo = None
+		self.sysinfo = None
 
 		self.headers = None
 		self.cookies = None
@@ -99,7 +106,7 @@ class StableDiffusionAPI:
 			try:
 				response = await client.get(f'{self.endpoint}{path}')
 			except:
-				return False, "Stable Diffusion Instance is not available - failed to connect."
+				return False, APIErrors.INSTANCE_NOT_AVAILABLE
 			if response.status != 200:
 				return False, "Stable Diffusion Instance has errored: " + (response.reason or "No reason was given.")
 			return True, await response.text()
@@ -109,7 +116,7 @@ class StableDiffusionAPI:
 			try:
 				response = await client.post(f'{self.endpoint}{path}', data=data, json=json)
 			except:
-				return False, "Stable Diffusion Instance is not available - failed to connect."
+				return False, APIErrors.INSTANCE_NOT_AVAILABLE
 			if response.status != 200:
 				return False, "Stable Diffusion Instance has errored: " + (response.reason or "No reason was given.")
 			return True, await response.text()
@@ -119,9 +126,8 @@ class StableDiffusionAPI:
 		success, _ = await self.internal_get( APIEndpoints.ping )
 		return success is True
 
-	async def get_system_info( self, cache_duration : int = 60 ) -> tuple[bool, Union[str, dict]]:
+	async def get_system_info( self ) -> tuple[bool, Union[str, dict]]:
 		'''Get the system information for the instance.'''
-
 		timestamp = time.time()
 		if timestamp < self.next_info_timestamp:
 			return True, self.last_sysinfo
@@ -136,7 +142,7 @@ class StableDiffusionAPI:
 		sys_info : dict = json.loads(sys_info_raw)
 
 		torch_info = sys_info.get('Torch env info')
-		if type(torch_info) == dict:
+		if isinstance(torch_info, dict) is True:
 			CPUINFO : dict = sys_info.get('CPU')
 			if CPUINFO != None:
 				CPUINFO.pop('model')
@@ -147,7 +153,7 @@ class StableDiffusionAPI:
 		else:
 			CPUINFO = "unknown"
 
-		self.next_sysinfo_timestamp = timestamp + cache_duration # 30 second interval
+		self.next_sysinfo_timestamp = timestamp + 60 # 60 second interval
 		self.sysinfo = {
 			"OS" : type(torch_info) == dict and torch_info.get('os') or 'Unknown',
 			"RAM" : sys_info.get('RAM'),
@@ -161,7 +167,277 @@ class StableDiffusionAPI:
 
 		return True, self.sysinfo
 
+	async def get_options( self ) -> tuple[bool, Union[str, dict]]:
+		success, response = await self.internal_get(APIEndpoints.options)
+		if success is False:
+			return False, APIErrors.INSTANCE_NOT_AVAILABLE
+
+		try:
+			data = json.loads(response)
+		except:
+			return False, APIErrors.JSON_DECODE_FAIL
+
+		return True, data
+
+	async def update_options( self, options : dict ) -> tuple[bool, Union[str, dict]]:
+		'''Update the stable diffusion options:'''
+		success, data = await self.get_options()
+		if success is False:
+			return False, data
+
+		try:
+			data.update( options )
+		except Exception as exception:
+			return False, f'Failed to update stable diffusion instance options due to exception:\n{exception}'
+
+		success, response = await self.internal_post(APIEndpoints.options, json=data)
+		if success is False:
+			return False, f'Failed to update stable diffusion instance options due to error: {response}'
+
+		return True, 'Stable diffusion instance options were updated.'
+
+	async def refresh_info( self ) -> tuple[bool, list]:
+		'''
+		Refresh all the stable diffusion information, which includes:
+		- Checkpoints
+		- LORAs (hypernetworks, loras, embeddings)
+		- Upscalers
+		'''
+		# TODO: asyncio.gather?
+		hasNotErrored : bool = True
+		errorList : list[Union[str, None]] = []
+		for path in [ APIEndpoints.refresh_checkpoints, APIEndpoints.refresh_vae, APIEndpoints.refresh_loras ]:
+			success, response = await self.internal_post( path )
+			if success is False:
+				hasNotErrored = False
+				errorList.append(response)
+			else:
+				errorList.append(None)
+		return hasNotErrored, errorList
+
+	async def get_instance_info( self ) -> Union[dict, None]:
+		'''
+		Get all the stable diffusion information, which includes:
+		- Checkpoints
+		- LORAs (hypernetworks, loras, embeddings)
+		- Upscalers & Modes
+		- Samplers
+		'''
+
+		timestamp = time.time()
+		if timestamp < self.next_info_timestamp:
+			return self.instance_info
+
+		available : bool = await self.is_available()
+		if available is False:
+			return None
+
+		base_info : dict[str, list] = {
+			"checkpoints" : None,
+			"hypernetworks" : None,
+			"embeddings" : None,
+			"loras" : None,
+			"upscalers" : None,
+			"upscaler_modes" : None,
+			"samplers" : None
+		}
+
+		async def parse_endpoint( endpoint : str ) -> Union[list, dict, None]:
+			success, response = await self.internal_get(endpoint)
+			if success is False:
+				return None
+			try:
+				return json.loads(response)
+			except:
+				return None
+
+		# TODO: asyncio.gather?
+
+		# checkpoints
+		checkpoints : list[dict] = await parse_endpoint( APIEndpoints.get_checkpoints )
+		if checkpoints is not None:
+			base_info["checkpoints"] = [ {
+				'title' : chpt['title'],
+				'model_name' : chpt['model_name']
+			} for chpt in checkpoints ]
+
+		# embeddings
+		embeddings : dict = await parse_endpoint( APIEndpoints.get_embeddings )
+		if embeddings is not None:
+			base_info['embeddings'] = list( embeddings['loaded'].keys() )
+
+		# loras
+		loras : list[dict] = await parse_endpoint( APIEndpoints.get_loras )
+		if loras is not None:
+			base_info['loras'] = [ data['name'] for data in loras ]
+
+		# upscalers
+		upscalers : list[dict] = await parse_endpoint( APIEndpoints.get_upscalers )
+		if upscalers is not None:
+			base_info['upscalers'] = [ data['name'] for data in upscalers ]
+
+		# upscaler modes
+		upscaler_modes : list[dict] = await parse_endpoint( APIEndpoints.get_upscaler_modes )
+		if upscaler_modes is not None:
+			base_info['upscaler_modes'] = [ data['name'] for data in upscaler_modes ]
+
+		# samplers
+		samplers : list[dict] = await parse_endpoint( APIEndpoints.get_samplers )
+		if samplers is not None:
+			base_info['samplers'] = [ data['name'] for data in samplers ]
+
+		self.next_info_timestamp = timestamp + 60
+		self.instance_info = base_info
+
+		return base_info
+
+	async def skip_operation( self ) -> bool:
+		'''Skip the current operation.'''
+		success, _ = await self.internal_post( APIEndpoints.skip )
+		return success
+
+	async def interrupt_operation( self ) -> bool:
+		'''Interrupt the current operation.'''
+		success, _ = await self.internal_post( APIEndpoints.interrupt )
+		return success
+
+	async def get_memory( self ) -> tuple[bool, Union[str, dict]]:
+		'''Get memory information'''
+		success, response = await self.internal_get(APIEndpoints.memory)
+		if success is False:
+			return False, APIErrors.INSTANCE_NOT_AVAILABLE
+		try:
+			return True, json.loads(response)
+		except:
+			return False, APIErrors.JSON_DECODE_FAIL
+
+	async def unload_active_checkpoint( self ) -> bool:
+		'''Unload the active checkpoint in memory.'''
+		success, _ = await self.internal_post( APIEndpoints.unload_active_checkpoint )
+		return success is True
+
+	async def get_progress( self ) -> tuple[bool, Union[str, dict]]:
+		'''Get the current generation progress'''
+		success, response = await self.internal_get(APIEndpoints.progress)
+		if success is False:
+			return False, APIErrors.INSTANCE_NOT_AVAILABLE
+
+		try:
+			data : dict = json.loads(response)
+		except:
+			return False, APIErrors.JSON_DECODE_FAIL
+
+		pop_indexes(data, ['current_image', 'textinfo', 'state'])
+		if 'eta_relative' in data:
+			data['eta'] = round(data.pop('eta_relative'), 3)
+
+		return True, data
+
+	async def get_queue_status( self ) -> tuple[bool, Union[str, dict]]:
+		'''Get the current queue status'''
+		success, response = await self.internal_get(APIEndpoints.progress)
+		if success is False:
+			return False, APIErrors.INSTANCE_NOT_AVAILABLE
+
+		try:
+			return True, json.loads(response)
+		except:
+			return False, APIErrors.JSON_DECODE_FAIL
+
+	async def text2image( self, parameters : SDTxt2ImgParams ) -> tuple[bool, Union[str, dict]]:
+		'''Query a text2image generation with given parameters.'''
+		params : dict = parameters.model_dump()
+		checkpoint : str = params.pop('checkpoint')
+
+		success, response = await self.update_options({
+			'sd_model_checkpoint': checkpoint
+		})
+
+		if success is False:
+			return False, f'Failed to load checkpoint {checkpoint} due to:\n{response}'
+
+		self.busy = True
+		success, response = await self.internal_post(APIEndpoints.txt2img, json=params)
+		self.busy = False
+
+		if success is False:
+			return False, f'Failed to queue txt2img request due to an error:\n{response}'
+
+		try:
+			return True, json.loads(response) # returns the images
+		except:
+			return False, APIErrors.JSON_DECODE_FAIL
+
+class OperationStatus(Enum):
+	NON_EXISTANT = 0
+	IN_QUEUE = 1
+	IN_PROGRESS = 2
+	COMPLETED = 3
+
+class Operation:
+	uuid : str = Field(default_factory=lambda : uuid4().hex)
+	state : int = Field(OperationStatus.NON_EXISTANT.value)
+
+# class SDImage(BaseModel):
+# 	'''A Generated Stable Diffusion Image.'''
+# 	size : str
+# 	data : str
+
+# class SDSubItem(BaseModel):
+# 	'''An item in queue for generation (no image data).'''
+# 	uuid : str = Field(default_factory=lambda : uuid4().hex)
+# 	error : str = Field(None)
+# 	completed : bool = Field(False)
+# 	generating : bool = Field(False)
+# 	canceled : bool = Field(False)
+# 	timestamp : str = Field(default_factory=tztimestamp)
+# 	params : SDTxt2ImgParams = Field(None)
+
+# class SDItem(SDSubItem):
+# 	'''An item in queue for generation.'''
+# 	images : list[SDImage] = Field(default_factory=list)
+
 class StableDiffusionDistributor:
+
+	endpoints : list[StableDiffusionAPI]
+	operations : dict[str, Operation]
+
+	def __init__( self ) -> None:
+		self.endpoints = list()
+
+	# queue : list[SDItem]
+	# results : dict[str, SDItem]
+
+	# def __init__( self ) -> None:
+	# 	self.queue = list()
+	# 	self.results = dict()
+
+	# async def get_operation_metadata( self, unique : str, hide_params : bool = False ) -> Union[SDSubItem, None]:
+	# 	'''Get the operation's metadata'''
+	# 	value : SDItem = self.results.get(unique)
+	# 	if value is None:
+	# 		return None
+	# 	try:
+	# 		value = SDSubItem.model_validate(value, strict=False)
+	# 		if hide_params is True:
+	# 			value.params = None
+	# 		return value
+	# 	except Exception as exception:
+	# 		print(f'Failed to convert "SDItem" model to "SDSubItem" model:\n{exception}')
+	# 		return None
+
+	# async def get_operation_images( self, unique : str ) -> Union[list[SDImage], None]:
+	# 	'''Get the target operation images (if available)'''
+	# 	value : SDItem = self.results.get(unique)
+	# 	if value is None:
+	# 		return None
+	# 	return value.images
+
+	# async def clear_operation( self, unique : str ) -> None:
+	# 	'''Clear the operation from memory'''
+	# 	if unique in self.results:
+	# 		self.results.pop(unique)
+
 	pass
 
 if __name__ == '__main__':
@@ -169,7 +445,7 @@ if __name__ == '__main__':
 	async def main() -> None:
 		instance = StableDiffusionAPI('http://127.0.0.1:7860')
 
-		success, response = await instance.get_system_info()
+		success, response = await instance.get_memory()
 		print(response)
 
 	asyncio.run(main())
