@@ -6,7 +6,8 @@ from typing import Union
 from enum import Enum
 from PIL import Image
 from threading import Thread
-from random import randint
+from io import BytesIO
+from base64 import b64decode
 
 import json
 import datetime
@@ -27,6 +28,9 @@ ASPECT_RATIO_MAP : dict[str, tuple[int, int]] = {
 	"1024x768" : (1024, 768),
 	"1024x1024" : (1024, 1024),
 }
+
+def load_bs4_image( data : str ) -> Image.Image:
+	return Image.open( BytesIO( b64decode(data) ) ).convert('RGB')
 
 def timestamp() -> int:
 	return int(round(datetime.datetime.now(datetime.timezone.utc).timestamp()))
@@ -639,7 +643,7 @@ async def test() -> None:
 
 	if status == OperationStatus.COMPLETED.value:
 		images = await local_distributor.get_operation_images(operation_id)
-		print(images[0])
+		load_bs4_image(images[0]).show('Generated Image')
 	elif status == OperationStatus.ERRORED.value:
 		print(operation.error)
 
