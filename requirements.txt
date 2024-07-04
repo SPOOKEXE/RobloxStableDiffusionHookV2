@@ -6,4 +6,5 @@ pydantic
 pyngrok
 python-multipart
 requests
+uvicorn[standard]
 # pycryptodomex

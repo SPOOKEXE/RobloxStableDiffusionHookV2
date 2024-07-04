@@ -430,10 +430,10 @@ class StableDiffusionDistributor:
 	async def get_instances_infos( self ) -> list[dict]:
 		for instance in self.instances:
 			_, _ = await instance.refresh_info()
-		return [ {
+		return [{
 			"sys_info" : instance.get_system_info(),
 			"sd_info" : instance.get_instance_info()
-		} for instance in self.instances ]
+		} for instance in self.instances]
 
 	async def internal_txt2img( self, hash_id : str, parameters : SDTxt2ImgParams ) -> None:
 		raise NotImplementedError

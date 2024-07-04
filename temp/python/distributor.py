@@ -43,12 +43,6 @@ def log_user_creation( user : str, userId : int, data : dict, log_dir : str = "l
 		img_filepath = os.path.join( log_dir, str(userId), f"{timestamp}_{index}.jpeg" )
 		load_image_from_sd( img ).save( img_filepath )
 
-@dataclass
-class DistributorInstance:
-	sd_instances : list[StableDiffusionInstance] = field(default_factory=list)
-	hash_id_cache : list[str] = field(default_factory=list)
-	counter : int = 0
-
 class DistributorAPI:
 
 	@staticmethod
