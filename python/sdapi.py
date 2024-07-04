@@ -48,8 +48,6 @@ class APIEndpoints:
 	get_embeddings = '/sdapi/v1/embeddings'
 	get_loras = '/sdapi/v1/loras'
 	get_samplers = '/sdapi/v1/samplers'
-	get_upscalers = '/sdapi/v1/upscalers'
-	get_upscaler_modes = '/sdapi/v1/latent-upscale-modes'
 
 	unload_active_checkpoint = '/sdapi/v1/unload-checkpoint'
 
@@ -65,7 +63,7 @@ class SDTxt2ImgParams(BaseModel):
 
 	steps : int = Field(25)
 	cfg_scale : float = Field(7.0)
-	sampler_name : str = Field('Eular a')
+	sampler_name : str = Field('Euler a')
 
 	width : int = Field(512)
 	height : int = Field(512)
@@ -205,7 +203,6 @@ class StableDiffusionInstance:
 		Refresh all the stable diffusion information, which includes:
 		- Checkpoints
 		- LORAs (loras, embeddings)
-		- Upscalers
 		'''
 		# TODO: asyncio.gather?
 		hasNotErrored : bool = True
@@ -224,7 +221,6 @@ class StableDiffusionInstance:
 		Get all the stable diffusion information, which includes:
 		- Checkpoints
 		- LORAs (loras, embeddings)
-		- Upscalers & Modes
 		- Samplers
 		'''
 
@@ -240,8 +236,6 @@ class StableDiffusionInstance:
 			"checkpoints" : None,
 			"embeddings" : None,
 			"loras" : None,
-			"upscalers" : None,
-			"upscaler_modes" : None,
 			"samplers" : None
 		}
 
@@ -273,16 +267,6 @@ class StableDiffusionInstance:
 		loras : list[dict] = await parse_endpoint( APIEndpoints.get_loras )
 		if loras is not None:
 			base_info['loras'] = [ data['name'] for data in loras ]
-
-		# upscalers
-		upscalers : list[dict] = await parse_endpoint( APIEndpoints.get_upscalers )
-		if upscalers is not None:
-			base_info['upscalers'] = [ data['name'] for data in upscalers ]
-
-		# upscaler modes
-		upscaler_modes : list[dict] = await parse_endpoint( APIEndpoints.get_upscaler_modes )
-		if upscaler_modes is not None:
-			base_info['upscaler_modes'] = [ data['name'] for data in upscaler_modes ]
 
 		# samplers
 		samplers : list[dict] = await parse_endpoint( APIEndpoints.get_samplers )
@@ -360,6 +344,7 @@ class StableDiffusionInstance:
 			return False, f'Failed to load checkpoint {checkpoint} due to:\n{response}'
 
 		self.busy = True
+		print(params)
 		success, response = await self.internal_post(APIEndpoints.txt2img, json=params)
 		self.busy = False
 
@@ -399,8 +384,8 @@ class StableDiffusionDistributor:
 	operations : dict[str, Operation]
 	queue : list[str]
 
-	def __init__( self, instances : list[StableDiffusionInstance] ) -> None:
-		self.instances = instances
+	def __init__( self, instances : Union[list[StableDiffusionInstance], None] ) -> None:
+		self.instances = instances if instances is not None else None
 		self.operations = dict()
 		self.queue = list()
 
@@ -409,7 +394,7 @@ class StableDiffusionDistributor:
 		for instance in self.instances:
 			available = await instance.is_available()
 			if available is False:
-				print(f"Stable Diffusion Instance is unavailable: {instance.url}")
+				print(f"Stable Diffusion Instance is unavailable: {instance.endpoint}")
 				unavailable.append( instance )
 				self.instances.remove( instance )
 		return unavailable
@@ -417,10 +402,12 @@ class StableDiffusionDistributor:
 	async def get_instances_infos( self ) -> list[dict]:
 		for instance in self.instances:
 			_, _ = await instance.refresh_info()
-		return [{
-			"sys_info" : instance.get_system_info(),
-			"sd_info" : instance.get_instance_info()
-		} for instance in self.instances]
+		infos : list[dict] = []
+		for instance in self.instances:
+			_, sysinfo = await instance.get_system_info()
+			instinfo = await instance.get_instance_info()
+			infos.append({ "sys_info" : sysinfo, "sd_info" : instinfo })
+		return infos
 
 	async def _internal_txt2img(self, instance : StableDiffusionInstance, operation : Operation) -> None:
 		instance.busy = True
@@ -486,7 +473,7 @@ class StableDiffusionDistributor:
 			return self.operations[operation_id].results
 		return None
 
-	async def cancel_operation_operation( self, operation_id : str ) -> None:
+	async def cancel_operation( self, operation_id : str ) -> None:
 		if operation_id in self.queue:
 			self.queue.remove(operation_id)
 		operation : Operation = self.operations.get(operation_id)
@@ -530,7 +517,10 @@ class StableDiffusionDistributor:
 
 	async def check_for_expired_operations(self) -> None:
 		now = timestamp()
-		for uuid, operation in self.operations.items():
+		for uuid in list(self.operations.keys()):
+			operation = self.operations.get(uuid)
+			if operation is None:
+				continue
 			if now - operation.timestamp > OPERATION_AUTO_EXPIRY:
 				print(f'Operation {operation.uuid} has expired.')
 				_ = self.operations.pop(uuid)
@@ -589,5 +579,5 @@ async def test() -> None:
 	elif status == OperationStatus.ERRORED.value:
 		print(operation.error)
 
-if __name__ == '__main__':
-	asyncio.run(test())
+# if __name__ == '__main__':
+# 	asyncio.run(test())
