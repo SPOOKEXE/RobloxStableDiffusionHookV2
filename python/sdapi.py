@@ -1,14 +1,20 @@
 
+from __future__ import annotations
 from uuid import uuid4
 from pydantic import BaseModel, Field
 from typing import Union
 from enum import Enum
+from PIL import Image
+from threading import Thread
+from random import randint
 
 import json
 import datetime
 import asyncio
 import aiohttp
 import time
+
+OPERATION_AUTO_EXPIRY : int = 60 # time before operations are auto-deleted
 
 ASPECT_RATIO_MAP : dict[str, tuple[int, int]] = {
 	"512x512" : (512, 512),
@@ -22,13 +28,16 @@ ASPECT_RATIO_MAP : dict[str, tuple[int, int]] = {
 	"1024x1024" : (1024, 1024),
 }
 
-def tztimestamp() -> str:
-	return str(datetime.datetime.now(datetime.timezone.utc)).replace(' ', 'T', 1).replace('+00:00', 'Z')
+def timestamp() -> int:
+	return int(round(datetime.datetime.now(datetime.timezone.utc).timestamp()))
 
 def pop_indexes( value : dict, indexes : list[str] ) -> None:
 	for index in indexes:
 		if index in value:
 			value.pop(index)
+
+def log_roblox_params( params : RobloxParameters ) -> None:
+	print(params.model_dump_json())
 
 class APIEndpoints:
 	'''Endpoints for the Stable Diffusion WebUI API'''
@@ -44,10 +53,9 @@ class APIEndpoints:
 
 	refresh_checkpoints = '/sdapi/v1/refresh-checkpoints'
 	refresh_vae = '/sdapi/v1/refresh-vae' # do along with checkpoints
-	refresh_loras = '/sdapi/v1/refresh-loras' # embeddings, hypernetworks, loras
+	refresh_loras = '/sdapi/v1/refresh-loras' # embeddings, loras
 
 	get_checkpoints = '/sdapi/v1/sd-models'
-	get_hypernetworks = '/sdapi/v1/hypernetworks'
 	get_embeddings = '/sdapi/v1/embeddings'
 	get_loras = '/sdapi/v1/loras'
 	get_samplers = '/sdapi/v1/samplers'
@@ -61,10 +69,10 @@ class APIErrors:
 	JSON_DECODE_FAIL = "Failed to JSON decode response from Stable Diffusion Instance."
 
 class SDTxt2ImgParams(BaseModel):
-	checkpoint : str
+	checkpoint : str = Field(None)
 
-	prompt : str
-	negative : str
+	prompt : str = Field(None)
+	negative : str = Field(None)
 
 	steps : int = Field(25)
 	cfg_scale : float = Field(7.0)
@@ -78,6 +86,7 @@ class SDTxt2ImgParams(BaseModel):
 	# n_iter : int = Field(1)
 
 class StableDiffusionInstance:
+	uuid : str
 	endpoint : str
 	busy : bool
 
@@ -89,7 +98,13 @@ class StableDiffusionInstance:
 	headers : dict
 	cookies : dict
 
-	def __init__( self, endpoint : str ) -> None:
+	def __init__(
+		self,
+		endpoint : str,
+		headers : dict = None,
+		cookies : dict = None,
+	) -> None:
+		self.uuid = uuid4().hex
 		self.endpoint = endpoint
 		self.busy = False
 
@@ -98,8 +113,8 @@ class StableDiffusionInstance:
 		self.next_sysinfo_timestamp = -1
 		self.sysinfo = None
 
-		self.headers = None
-		self.cookies = None
+		self.headers = headers
+		self.cookies = cookies
 
 	async def internal_get(self, path : str) -> tuple[bool, str]:
 		async with aiohttp.ClientSession(headers=self.headers, cookies=self.cookies) as client:
@@ -200,7 +215,7 @@ class StableDiffusionInstance:
 		'''
 		Refresh all the stable diffusion information, which includes:
 		- Checkpoints
-		- LORAs (hypernetworks, loras, embeddings)
+		- LORAs (loras, embeddings)
 		- Upscalers
 		'''
 		# TODO: asyncio.gather?
@@ -219,7 +234,7 @@ class StableDiffusionInstance:
 		'''
 		Get all the stable diffusion information, which includes:
 		- Checkpoints
-		- LORAs (hypernetworks, loras, embeddings)
+		- LORAs (loras, embeddings)
 		- Upscalers & Modes
 		- Samplers
 		'''
@@ -234,7 +249,6 @@ class StableDiffusionInstance:
 
 		base_info : dict[str, list] = {
 			"checkpoints" : None,
-			"hypernetworks" : None,
 			"embeddings" : None,
 			"loras" : None,
 			"upscalers" : None,
@@ -369,36 +383,37 @@ class StableDiffusionInstance:
 			return False, APIErrors.JSON_DECODE_FAIL
 
 class OperationStatus(Enum):
-	NON_EXISTANT = 0
-	IN_QUEUE = 1
-	IN_PROGRESS = 2
-	COMPLETED = 3
+	IN_QUEUE = 0
+	IN_PROGRESS = 1
+	COMPLETED = 2
+	CANCELED = 3
+	ERRORED = 4
 
 class SDImage(BaseModel):
 	'''A Generated Stable Diffusion Image.'''
-	size : tuple[int, int]
-	data : str
+	size : tuple[int, int] = Field(None)
+	data : str = Field(None)
 
 class Operation(BaseModel):
 	# base
 	uuid : str = Field(default_factory=lambda : uuid4().hex)
 	state : int = Field(OperationStatus.IN_QUEUE.value)
-	timestamp : str = Field(default_factory=tztimestamp)
-	completed : bool = Field(False)
+	timestamp : int = Field(default_factory=timestamp)
 	error : str = Field(None)
 	# txt2img
 	params : SDTxt2ImgParams = Field(None)
 	results : list[SDImage] = Field(None)
+	sdinstance : str = Field(None)
 
 class RobloxParameters(BaseModel):
-	player_name : str
-	user_id : int
-	timestamp : str = Field(default_factory=tztimestamp)
+	player_name : str = Field(None)
+	user_id : int = Field(None)
+	timestamp : int = Field(default_factory=timestamp)
 
-	checkpoint : str
+	checkpoint : str = Field(None)
 
-	prompt : str
-	negative : str
+	prompt : str = Field(None)
+	negative : str = Field(None)
 
 	steps : int = Field(25)
 	cfg_scale : float = Field(7.0)
@@ -412,8 +427,8 @@ class StableDiffusionDistributor:
 	operations : dict[str, Operation]
 	queue : list[str]
 
-	def __init__( self ) -> None:
-		self.instances = list()
+	def __init__( self, instances : list[StableDiffusionInstance] ) -> None:
+		self.instances = instances
 		self.operations = dict()
 		self.queue = list()
 
@@ -435,33 +450,198 @@ class StableDiffusionDistributor:
 			"sd_info" : instance.get_instance_info()
 		} for instance in self.instances]
 
-	async def internal_txt2img( self, hash_id : str, parameters : SDTxt2ImgParams ) -> None:
-		raise NotImplementedError
+	async def _internal_txt2img(self, instance : StableDiffusionInstance, operation : Operation) -> None:
+		instance.busy = True
+		operation.state = OperationStatus.IN_PROGRESS.value
+		operation.sdinstance = instance.uuid
 
-	async def distribute_txt2img( self, parameters : SDTxt2ImgParams ) -> Union[str, None]:
-		raise NotImplementedError
+		params = operation.params
+		success, response = await instance.text2image(params)
 
-	async def distribute_roblox_txt2img( self, paramters : RobloxParameters ) -> Union[str, None]:
-		raise NotImplementedError
+		instance.busy = False
+		if success is False:
+			operation.error = response
+			operation.state = OperationStatus.ERRORED.value
+		else:
+			size = (params.width, params.height)
+			results = [ SDImage(data=image_bs4, size=size) for image_bs4 in response['images'] ]
+			operation.results = results
+			operation.state = OperationStatus.COMPLETED.value
 
-	async def get_hash_sdinstance( self, hash_id : str ) -> StableDiffusionInstance:
-		raise NotImplementedError
+	async def queue_txt2img( self, parameters : SDTxt2ImgParams ) -> Union[str, None]:
+		operation = Operation(params=parameters)
+		self.operations[operation.uuid] = operation
+		self.queue.append(operation.uuid)
+		return operation.uuid
 
-	async def get_hash_status( self, hash_id : str ) -> OperationStatus:
-		raise NotImplementedError
+	async def queue_roblox_txt2img( self, params : RobloxParameters ) -> tuple[bool, str]:
+		if params.player_name is not None and params.user_id is not None:
+			log_roblox_params(params)
 
-	async def is_hash_completed( self, hash_id : str ) -> bool:
-		status = await self.get_hash_status(hash_id)
-		return status == OperationStatus.COMPLETED or status == OperationStatus.NON_EXISTANT
+		if params.size not in ASPECT_RATIO_MAP.keys():
+			return False, 'Invalid size parameter - must be an aspect ratio mapped value.'
 
-	async def get_hash_progress( self, hash_id : str ) -> Union[dict, None]:
-		raise NotImplementedError
+		width, height = ASPECT_RATIO_MAP.get(params.size)
 
-	async def get_hash_queue_info( self, hash_id : str ) -> Union[dict, None]:
-		raise NotImplementedError
+		print(f'Queueing Roblox txt2img parameters: {params.model_dump_json(indent=None)}')
 
-	async def get_hash_images( self, hash_id : str ) -> Union[list, None]:
-		raise NotImplementedError
+		params = SDTxt2ImgParams(
+			checkpoint=params.checkpoint,
+			prompt=params.prompt,
+			negative=params.negative,
+			steps=params.steps,
+			cfg_scale=params.cfg_scale,
+			sampler_name=params.sampler_name,
+			width=width,
+			height=height,
+			seed=params.seed,
+		)
 
-	async def cancel_hash_operation( self, hash_id : str ) -> None:
-		raise NotImplementedError
+		return await self.queue_txt2img(params)
+
+	async def get_operation_sdinstance( self, operation_id : str ) -> Union[StableDiffusionInstance, None]:
+		operation : Operation = self.operations.get(operation_id)
+		if operation is None:
+			return None
+		uuid : str = operation.sdinstance
+		if uuid is None:
+			return None
+		for instance in self.instances:
+			if instance.uuid == uuid:
+				return instance
+		return None
+
+	async def get_operation_status( self, operation_id : str ) -> Union[int, None]:
+		operation : Operation = self.operations.get(operation_id, None)
+		if operation is None:
+			return None
+		return operation.state
+
+	async def is_operation_completed( self, operation_id : str ) -> bool:
+		status = await self.get_operation_status(operation_id)
+		return \
+			status is None or \
+			status == OperationStatus.CANCELED.value or \
+			status == OperationStatus.ERRORED.value or \
+			status == OperationStatus.COMPLETED.value
+
+	async def get_operation_progress( self, operation_id : str ) -> Union[dict, None]:
+		instance : StableDiffusionInstance = await self.get_operation_sdinstance(operation_id)
+		if instance is None:
+			return None
+		success, response = await instance.get_progress()
+		if success is True:
+			return response
+		return None
+
+	async def get_operation_images( self, operation_id : str ) -> Union[list[Image.Image], None]:
+		if operation_id in self.operations.keys():
+			return self.operations[operation_id].results
+		return None
+
+	async def cancel_operation_operation( self, operation_id : str ) -> None:
+		if operation_id in self.queue:
+			self.queue.remove(operation_id)
+		operation : Operation = self.operations.get(operation_id)
+		if operation is None:
+			return
+		instance = await self.get_operation_sdinstance( operation_id )
+		if instance is None:
+			return
+		operation.state = OperationStatus.CANCELED.value
+		operation.sdinstance = None
+		_ = await instance.skip_operation()
+		_ = await instance.interrupt_operation()
+		instance.busy = False
+
+	async def update_queue(self) -> None:
+		# find free instances
+		free_instances = [ instance for instance in self.instances if instance.busy is False ]
+		if len(free_instances) == 0:
+			return # no free instances, skip
+
+		# remove any missing queued operation mappings
+		index = 0
+		while index < len(self.queue):
+			operation_id : str = self.queue[index]
+			operation = self.operations.get(operation_id)
+			if operation is None:
+				self.queue.pop(index)
+			else:
+				index += 1
+
+		# run batch of coroutines to generate images
+		coros = []
+		quantity = min(len(free_instances), len(self.queue))
+		while quantity > 0:
+			quantity -= 1
+			instance = free_instances.pop(0)
+			operation_id = self.queue.pop(0)
+			operation = self.operations[operation_id]
+			coros.append(self._internal_txt2img( instance, operation ))
+		await asyncio.gather(*coros)
+
+	async def check_for_expired_operations(self) -> None:
+		now = timestamp()
+		for uuid, operation in self.operations.items():
+			if now - operation.timestamp > OPERATION_AUTO_EXPIRY:
+				print(f'Operation {operation.uuid} has expired.')
+				_ = self.operations.pop(uuid)
+
+	async def initialize(self) -> None:
+		def main_loop() -> None:
+			asyncio.new_event_loop()
+			while True:
+				asyncio.run(self.check_for_expired_operations())
+				asyncio.run(self.update_queue())
+				time.sleep(3)
+		thread = Thread(target=main_loop)
+		thread.start()
+
+async def test() -> None:
+	local_distributor = StableDiffusionDistributor([
+		StableDiffusionInstance('http://127.0.0.1:7860')
+	])
+
+	await local_distributor.initialize()
+
+	print(await local_distributor.instances[0].get_instance_info())
+
+	params : RobloxParameters = RobloxParameters(
+		player_name="SPOOK_EXE",
+		user_id=-1,
+		checkpoint="analogmadnessrealisticmodel\\analogMadness_v70.safetensors [71652f47a2]",
+		prompt="pug",
+		negative="",
+		steps=25,
+		cfg_scale=7,
+		sampler_name="Euler a",
+		size="512x512",
+		seed=1
+	)
+
+	operation_id : Union[str, None] = await local_distributor.queue_roblox_txt2img(params)
+	if operation_id is None:
+		raise ValueError("Attempt to queue did not return a operation id.")
+
+	while True:
+		await asyncio.sleep(1)
+		status : int = await local_distributor.get_operation_status(operation_id)
+		print(OperationStatus(status).name)
+		complete : bool = await local_distributor.is_operation_completed( operation_id )
+		if complete is True:
+			break
+		print( await local_distributor.get_operation_progress(operation_id) )
+
+	operation = local_distributor.operations.get(operation_id)
+	if operation is None:
+		raise ValueError("Could not find operation after queuing!")
+
+	if status == OperationStatus.COMPLETED.value:
+		images = await local_distributor.get_operation_images(operation_id)
+		print(images[0])
+	elif status == OperationStatus.ERRORED.value:
+		print(operation.error)
+
+if __name__ == '__main__':
+	asyncio.run(test())
