@@ -17,18 +17,6 @@ import time
 
 OPERATION_AUTO_EXPIRY : int = 60 # time before operations are auto-deleted
 
-ASPECT_RATIO_MAP : dict[str, tuple[int, int]] = {
-	"512x512" : (512, 512),
-	"512x768" : (512, 768),
-	"512x1024" : (512, 1024),
-	"768x512" : (768, 512),
-	"768x768" : (768, 768),
-	"768x1024" : (768, 1024),
-	"1024x512" : (1024, 512),
-	"1024x768" : (1024, 768),
-	"1024x1024" : (1024, 1024),
-}
-
 def load_bs4_image( data : str ) -> Image.Image:
 	return Image.open( BytesIO( b64decode(data) ) ).convert('RGB')
 
@@ -39,9 +27,6 @@ def pop_indexes( value : dict, indexes : list[str] ) -> None:
 	for index in indexes:
 		if index in value:
 			value.pop(index)
-
-def log_roblox_params( params : RobloxParameters ) -> None:
-	print(params.model_dump_json())
 
 class APIEndpoints:
 	'''Endpoints for the Stable Diffusion WebUI API'''
@@ -409,23 +394,6 @@ class Operation(BaseModel):
 	results : list[SDImage] = Field(None)
 	sdinstance : str = Field(None)
 
-class RobloxParameters(BaseModel):
-	player_name : str = Field(None)
-	user_id : int = Field(None)
-	timestamp : int = Field(default_factory=timestamp)
-
-	checkpoint : str = Field(None)
-
-	prompt : str = Field(None)
-	negative : str = Field(None)
-
-	steps : int = Field(25)
-	cfg_scale : float = Field(7.0)
-	sampler_name : str = Field('Eular a')
-
-	size : str = Field("512x512")
-	seed : int = Field(-1)
-
 class StableDiffusionDistributor:
 	instances : list[StableDiffusionInstance]
 	operations : dict[str, Operation]
@@ -477,31 +445,6 @@ class StableDiffusionDistributor:
 		self.operations[operation.uuid] = operation
 		self.queue.append(operation.uuid)
 		return operation.uuid
-
-	async def queue_roblox_txt2img( self, params : RobloxParameters ) -> tuple[bool, str]:
-		if params.player_name is not None and params.user_id is not None:
-			log_roblox_params(params)
-
-		if params.size not in ASPECT_RATIO_MAP.keys():
-			return False, 'Invalid size parameter - must be an aspect ratio mapped value.'
-
-		width, height = ASPECT_RATIO_MAP.get(params.size)
-
-		print(f'Queueing Roblox txt2img parameters: {params.model_dump_json(indent=None)}')
-
-		params = SDTxt2ImgParams(
-			checkpoint=params.checkpoint,
-			prompt=params.prompt,
-			negative=params.negative,
-			steps=params.steps,
-			cfg_scale=params.cfg_scale,
-			sampler_name=params.sampler_name,
-			width=width,
-			height=height,
-			seed=params.seed,
-		)
-
-		return await self.queue_txt2img(params)
 
 	async def get_operation_sdinstance( self, operation_id : str ) -> Union[StableDiffusionInstance, None]:
 		operation : Operation = self.operations.get(operation_id)
@@ -611,20 +554,19 @@ async def test() -> None:
 
 	print(await local_distributor.instances[0].get_instance_info())
 
-	params : RobloxParameters = RobloxParameters(
-		player_name="SPOOK_EXE",
-		user_id=-1,
+	params : SDTxt2ImgParams = SDTxt2ImgParams(
 		checkpoint="analogmadnessrealisticmodel\\analogMadness_v70.safetensors [71652f47a2]",
 		prompt="pug",
 		negative="",
 		steps=25,
 		cfg_scale=7,
 		sampler_name="Euler a",
-		size="512x512",
-		seed=1
+		width=512,
+		height=512,
+		seed=1,
 	)
 
-	operation_id : Union[str, None] = await local_distributor.queue_roblox_txt2img(params)
+	operation_id : Union[str, None] = await local_distributor.queue_txt2img(params)
 	if operation_id is None:
 		raise ValueError("Attempt to queue did not return a operation id.")
 

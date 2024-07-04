@@ -1,13 +1,71 @@
 
-from fastapi import FastAPI
 from typing import Any, Literal, Union
+from pydantic import BaseModel, Field
+from fastapi import FastAPI
 from fastapi import Depends, FastAPI, Body, HTTPException, Header, Request, Security
 from fastapi.security import api_key
 
-from sdapi import StableDiffusionInstance, StableDiffusionDistributor, SDTxt2ImgParams, Operation, OperationStatus
+from sdapi import StableDiffusionInstance, StableDiffusionDistributor, SDTxt2ImgParams, Operation, OperationStatus, ASPECT_RATIO_MAP, load_bs4_image, timestamp
 
 import uvicorn
 import time
+
+ASPECT_RATIO_MAP : dict[str, tuple[int, int]] = {
+	"512x512" : (512, 512),
+	"512x768" : (512, 768),
+	"512x1024" : (512, 1024),
+	"768x512" : (768, 512),
+	"768x768" : (768, 768),
+	"768x1024" : (768, 1024),
+	"1024x512" : (1024, 512),
+	"1024x768" : (1024, 768),
+	"1024x1024" : (1024, 1024),
+}
+
+class RobloxParameters(BaseModel):
+	player_name : str = Field(None)
+	user_id : int = Field(None)
+	timestamp : int = Field(default_factory=timestamp)
+
+	checkpoint : str = Field(None)
+
+	prompt : str = Field(None)
+	negative : str = Field(None)
+
+	steps : int = Field(25)
+	cfg_scale : float = Field(7.0)
+	sampler_name : str = Field('Eular a')
+
+	size : str = Field("512x512")
+	seed : int = Field(-1)
+
+def log_roblox_params( params : RobloxParameters ) -> None:
+	print(params.model_dump_json())
+
+async def queue_roblox_txt2img( distributor : StableDiffusionDistributor, params : RobloxParameters ) -> tuple[bool, str]:
+	if params.player_name is not None and params.user_id is not None:
+		log_roblox_params(params)
+
+	if params.size not in ASPECT_RATIO_MAP.keys():
+		return False, 'Invalid size parameter - must be an aspect ratio mapped value.'
+
+	width, height = ASPECT_RATIO_MAP.get(params.size)
+
+	print(f'Queueing Roblox txt2img parameters: {params.model_dump_json(indent=None)}')
+
+	params = SDTxt2ImgParams(
+		checkpoint=params.checkpoint,
+		prompt=params.prompt,
+		negative=params.negative,
+		steps=params.steps,
+		cfg_scale=params.cfg_scale,
+		sampler_name=params.sampler_name,
+		width=width,
+		height=height,
+		seed=params.seed,
+	)
+
+	return await distributor.queue_txt2img(params)
 
 APP_API_KEY : str = None
 
