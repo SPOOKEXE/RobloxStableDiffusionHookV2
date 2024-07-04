@@ -6,5 +6,6 @@ pydantic
 pyngrok
 python-multipart
 requests
+rsa
 uvicorn[standard]
 # pycryptodomex

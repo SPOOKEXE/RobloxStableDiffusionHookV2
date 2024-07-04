@@ -14,10 +14,10 @@
 - [✗] Admin Panel - clear TV queue, clear active image, temporary blacklist player
 
 ### [✗] Python:
-- [✗] asynchronous stable diffusion api
+- [✓] asynchronous stable diffusion api
 - [✗] image compression
 - [✓] preset image sizes
-- [✗] python fastapi server (NGROK, LOCAL_HOST)
+- [✓] python fastapi server (NGROK, LOCAL_HOST)
 - [✓] logging prompts in python (player name, player id, timestamp, prompt, models, image) into folder.
 - [✓] multi stable diffusion instance distributor system
 - [✓] operation asynchronous api - progress updates api

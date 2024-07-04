@@ -384,10 +384,15 @@ class StableDiffusionDistributor:
 	operations : dict[str, Operation]
 	queue : list[str]
 
+	_active : bool
+	_thread : Thread
+
 	def __init__( self, instances : Union[list[StableDiffusionInstance], None] ) -> None:
 		self.instances = instances if instances is not None else None
 		self.operations = dict()
 		self.queue = list()
+		self._active = False
+		self._thread = None
 
 	async def find_unavailable_instances( self ) -> list[StableDiffusionInstance]:
 		unavailable : list[StableDiffusionInstance] = []
@@ -528,12 +533,20 @@ class StableDiffusionDistributor:
 	async def initialize(self) -> None:
 		def main_loop() -> None:
 			asyncio.new_event_loop()
-			while True:
+			while self._active is True:
 				asyncio.run(self.check_for_expired_operations())
 				asyncio.run(self.update_queue())
 				time.sleep(3)
-		thread = Thread(target=main_loop)
-		thread.start()
+		await self.shutdown()
+		self._active = True
+		self._thread = Thread(target=main_loop)
+		self._thread.start()
+
+	async def shutdown(self) -> None:
+		self._active = False
+		if self._thread is not None:
+			self._thread.join() # wait for closure
+			self._thread = None
 
 async def test() -> None:
 	local_distributor = StableDiffusionDistributor([
