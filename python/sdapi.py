@@ -376,7 +376,7 @@ class OperationStatus(Enum):
 
 class SDImage(BaseModel):
 	'''A Generated Stable Diffusion Image.'''
-	size : str
+	size : tuple[int, int]
 	data : str
 
 class Operation(BaseModel):
@@ -393,8 +393,19 @@ class Operation(BaseModel):
 class RobloxParameters(BaseModel):
 	player_name : str
 	user_id : int
-	params : SDTxt2ImgParams = Field(None)
 	timestamp : str = Field(default_factory=tztimestamp)
+
+	checkpoint : str
+
+	prompt : str
+	negative : str
+
+	steps : int = Field(25)
+	cfg_scale : float = Field(7.0)
+	sampler_name : str = Field('Eular a')
+
+	size : str = Field("512x512")
+	seed : int = Field(-1)
 
 class StableDiffusionDistributor:
 	instances : list[StableDiffusionInstance]
@@ -428,6 +439,9 @@ class StableDiffusionDistributor:
 		raise NotImplementedError
 
 	async def distribute_txt2img( self, parameters : SDTxt2ImgParams ) -> Union[str, None]:
+		raise NotImplementedError
+
+	async def distribute_roblox_txt2img( self, paramters : RobloxParameters ) -> Union[str, None]:
 		raise NotImplementedError
 
 	async def get_hash_sdinstance( self, hash_id : str ) -> StableDiffusionInstance:
