@@ -15,12 +15,12 @@
 
 ### [✗] Python:
 - [✓] asynchronous stable diffusion api
-- [✗] image compression
 - [✓] preset image sizes
 - [✓] python fastapi server (NGROK, LOCAL_HOST)
 - [✓] logging prompts in python (player name, player id, timestamp, prompt, models, image) into folder.
 - [✓] multi stable diffusion instance distributor system
 - [✓] operation asynchronous api - progress updates api
+- [✗] image compression
 - [✗] RSA encrypted network traffic (generate key pair, 256 bits)
 
 ✓✗
