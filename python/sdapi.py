@@ -77,7 +77,7 @@ class SDTxt2ImgParams(BaseModel):
 	# batch_size : int = Field(1)
 	# n_iter : int = Field(1)
 
-class StableDiffusionAPI:
+class StableDiffusionInstance:
 	endpoint : str
 	busy : bool
 
@@ -374,78 +374,80 @@ class OperationStatus(Enum):
 	IN_PROGRESS = 2
 	COMPLETED = 3
 
-class Operation:
+class SDImage(BaseModel):
+	'''A Generated Stable Diffusion Image.'''
+	size : str
+	data : str
+
+class Operation(BaseModel):
+	# base
 	uuid : str = Field(default_factory=lambda : uuid4().hex)
-	state : int = Field(OperationStatus.NON_EXISTANT.value)
+	state : int = Field(OperationStatus.IN_QUEUE.value)
+	timestamp : str = Field(default_factory=tztimestamp)
+	completed : bool = Field(False)
+	error : str = Field(None)
+	# txt2img
+	params : SDTxt2ImgParams = Field(None)
+	results : list[SDImage] = Field(None)
 
-# class SDImage(BaseModel):
-# 	'''A Generated Stable Diffusion Image.'''
-# 	size : str
-# 	data : str
-
-# class SDSubItem(BaseModel):
-# 	'''An item in queue for generation (no image data).'''
-# 	uuid : str = Field(default_factory=lambda : uuid4().hex)
-# 	error : str = Field(None)
-# 	completed : bool = Field(False)
-# 	generating : bool = Field(False)
-# 	canceled : bool = Field(False)
-# 	timestamp : str = Field(default_factory=tztimestamp)
-# 	params : SDTxt2ImgParams = Field(None)
-
-# class SDItem(SDSubItem):
-# 	'''An item in queue for generation.'''
-# 	images : list[SDImage] = Field(default_factory=list)
+class RobloxParameters(BaseModel):
+	player_name : str
+	user_id : int
+	params : SDTxt2ImgParams = Field(None)
+	timestamp : str = Field(default_factory=tztimestamp)
 
 class StableDiffusionDistributor:
-
-	endpoints : list[StableDiffusionAPI]
+	instances : list[StableDiffusionInstance]
 	operations : dict[str, Operation]
+	queue : list[str]
 
 	def __init__( self ) -> None:
-		self.endpoints = list()
+		self.instances = list()
+		self.operations = dict()
+		self.queue = list()
 
-	# queue : list[SDItem]
-	# results : dict[str, SDItem]
+	async def find_unavailable_instances( self ) -> list[StableDiffusionInstance]:
+		unavailable : list[StableDiffusionInstance] = []
+		for instance in self.instances:
+			available = await instance.is_available()
+			if available is False:
+				print(f"Stable Diffusion Instance is unavailable: {instance.url}")
+				unavailable.append( instance )
+				self.instances.remove( instance )
+		return unavailable
 
-	# def __init__( self ) -> None:
-	# 	self.queue = list()
-	# 	self.results = dict()
+	async def get_instances_infos( self ) -> list[dict]:
+		for instance in self.instances:
+			_, _ = await instance.refresh_info()
+		return [ {
+			"sys_info" : instance.get_system_info(),
+			"sd_info" : instance.get_instance_info()
+		} for instance in self.instances ]
 
-	# async def get_operation_metadata( self, unique : str, hide_params : bool = False ) -> Union[SDSubItem, None]:
-	# 	'''Get the operation's metadata'''
-	# 	value : SDItem = self.results.get(unique)
-	# 	if value is None:
-	# 		return None
-	# 	try:
-	# 		value = SDSubItem.model_validate(value, strict=False)
-	# 		if hide_params is True:
-	# 			value.params = None
-	# 		return value
-	# 	except Exception as exception:
-	# 		print(f'Failed to convert "SDItem" model to "SDSubItem" model:\n{exception}')
-	# 		return None
+	async def internal_txt2img( self, hash_id : str, parameters : SDTxt2ImgParams ) -> None:
+		raise NotImplementedError
 
-	# async def get_operation_images( self, unique : str ) -> Union[list[SDImage], None]:
-	# 	'''Get the target operation images (if available)'''
-	# 	value : SDItem = self.results.get(unique)
-	# 	if value is None:
-	# 		return None
-	# 	return value.images
+	async def distribute_txt2img( self, parameters : SDTxt2ImgParams ) -> Union[str, None]:
+		raise NotImplementedError
 
-	# async def clear_operation( self, unique : str ) -> None:
-	# 	'''Clear the operation from memory'''
-	# 	if unique in self.results:
-	# 		self.results.pop(unique)
+	async def get_hash_sdinstance( self, hash_id : str ) -> StableDiffusionInstance:
+		raise NotImplementedError
 
-	pass
+	async def get_hash_status( self, hash_id : str ) -> OperationStatus:
+		raise NotImplementedError
 
-if __name__ == '__main__':
+	async def is_hash_completed( self, hash_id : str ) -> bool:
+		status = await self.get_hash_status(hash_id)
+		return status == OperationStatus.COMPLETED or status == OperationStatus.NON_EXISTANT
 
-	async def main() -> None:
-		instance = StableDiffusionAPI('http://127.0.0.1:7860')
+	async def get_hash_progress( self, hash_id : str ) -> Union[dict, None]:
+		raise NotImplementedError
 
-		success, response = await instance.get_memory()
-		print(response)
+	async def get_hash_queue_info( self, hash_id : str ) -> Union[dict, None]:
+		raise NotImplementedError
 
-	asyncio.run(main())
+	async def get_hash_images( self, hash_id : str ) -> Union[list, None]:
+		raise NotImplementedError
+
+	async def cancel_hash_operation( self, hash_id : str ) -> None:
+		raise NotImplementedError

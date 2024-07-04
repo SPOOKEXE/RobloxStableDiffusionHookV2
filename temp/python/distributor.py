@@ -43,13 +43,6 @@ def log_user_creation( user : str, userId : int, data : dict, log_dir : str = "l
 		img_filepath = os.path.join( log_dir, str(userId), f"{timestamp}_{index}.jpeg" )
 		load_image_from_sd( img ).save( img_filepath )
 
-class OperationStatus(Enum):
-	NonExistent = -1
-	InQueue = 0
-	InProgress = 1
-	Finished = 2
-	Errored = 3
-
 @dataclass
 class DistributorInstance:
 	sd_instances : list[StableDiffusionInstance] = field(default_factory=list)
@@ -57,31 +50,6 @@ class DistributorInstance:
 	counter : int = 0
 
 class DistributorAPI:
-
-	@staticmethod
-	def check_stable_diffusion_instances( distributor : DistributorInstance ) -> list[StableDiffusionInstance]:
-		'''
-		Check all the stable diffusion instances to see if they are available
-		'''
-		unavailable_instances = []
-		for instance in distributor.sd_instances:
-			is_active = StableDiffusionAPI.is_sd_instance_online( instance )
-			if not is_active:
-				print("Stable Diffusion instance is unavailable: ", instance.url )
-				unavailable_instances.append( instance ) # add to unavailable
-				distributor.sd_instances.remove( instance ) # remove from active
-		return unavailable_instances
-
-	@staticmethod
-	def get_stable_diffusion_instance_infos( distributor : DistributorInstance ) -> list[dict]:
-		# refresh the instance informations
-		for instance in distributor.sd_instances:
-			StableDiffusionAPI.refresh_sd_instance_info( instance )
-		# pull all the information and return it
-		return [ {
-			"sys_info" : StableDiffusionAPI.get_sd_instance_system_info( instance )[1],
-			"sd_info" : StableDiffusionAPI.get_sd_instance_info( instance )[1]
-		} for instance in distributor.sd_instances ]
 
 	@staticmethod
 	def _internal_text2img( target_instance : StableDiffusionInstance, hash_id : str, parameters : dict ) -> None:
