@@ -268,7 +268,7 @@ class Ngrok:
 			time.sleep( 0.25 )
 		return Ngrok.tunnel.public_url
 
-async def main( host : str = '0.0.0.0', port : int = 5100, api_key : str = None ) -> None:
+async def localhost( host : str = '0.0.0.0', port : int = 5100, api_key : str = None ) -> None:
 	print(f'Setting API_Key to "{api_key}"')
 	await LOCAL_DISTRIBUTOR.initialize()
 	_ = await LOCAL_DISTRIBUTOR.find_unavailable_instances()

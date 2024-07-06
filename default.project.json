@@ -1,16 +1,10 @@
 {
-	"name": "stablediff-v2",
+	"name": "stablediffv2",
 	"tree": {
 		"$className": "DataModel",
 		"Workspace" : {
 			"$className" : "Workspace",
-			"$ignoreUnknownInstances": true,
-			"Hint" : {
-				"$className" : "Hint",
-				"$properties": {
-					"Text" : "Change your graphics quality to 1 to remove the black lines."
-				}
-			}
+			"$ignoreUnknownInstances": true
 		},
 		"ReplicatedStorage": {
 			"$className": "ReplicatedStorage",
@@ -26,6 +20,11 @@
 			"$className": "ServerStorage",
 			"$ignoreUnknownInstances": true,
 			"$path": "roblox/ServerStorage"
+		},
+		"StarterGui": {
+			"$className": "StarterGui",
+			"$ignoreUnknownInstances": true,
+			"$path": "roblox/StarterGui"
 		},
 		"StarterPlayer" : {
 			"$className": "StarterPlayer",

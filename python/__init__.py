@@ -1,5 +1,5 @@
 
-from network import main, Ngrok
+from network import localhost, Ngrok
 
 import asyncio
 
@@ -8,7 +8,7 @@ async def main( ngrok : bool = False, port : int = 5100, api_key : str = None ) 
 		Ngrok.set_port(port)
 		Ngrok.open_tunnel()
 		print(f'Ngrok tunnel has been opened: {Ngrok.await_ngrok_addr()}')
-	await main(host='0.0.0.0', port=port, api_key=api_key)
+	await localhost(host='0.0.0.0', port=port, api_key=api_key)
 	if ngrok is True:
 		Ngrok.close_tunnel()
 
