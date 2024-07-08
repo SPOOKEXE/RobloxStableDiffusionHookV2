@@ -51,44 +51,6 @@ end
 -- // Module // --
 local Module = {}
 
-function Module.GetSDInstances() : ( boolean, { table? } )
-	return RequestAsync(PYTHON_SERVER_URL, { command = 'get_sd_instances', })
-end
-
---[[
-	Get the target operation hash's status.
-]]
-function Module.GetHashStatus( hash_id : string ) : (boolean, number?)
-	typeAssert( 'hash_id', hash_id, 'string' )
-	return RequestAsync(PYTHON_SERVER_URL, { command = 'get_hash_status', hash = hash_id })
-end
-
---[[
-	Get the target operation hash's queue if available.
-]]
-function Module.GetHashQueue( hash_id : string ) : (boolean, table?)
-	typeAssert( 'hash_id', hash_id, 'string' )
-	return RequestAsync(PYTHON_SERVER_URL, { command = 'get_hash_queue', hash = hash_id })
-end
-
---[[
-	Get the target operation hash's generation progress if available.
-]]
-function Module.GetHashProgress( hash_id : string ) : (boolean, table?)
-	typeAssert( 'hash_id', hash_id, 'string' )
-	return RequestAsync(PYTHON_SERVER_URL, { command = 'get_hash_progress', hash = hash_id })
-end
-
---[[
-	Get the target operation hash's generated image from the server if available.
-]]
-function Module.GetHashImage( hash_id : string ) : (boolean, string?)
-	typeAssert( 'hash_id', hash_id, 'string' )
-	return RequestAsync(PYTHON_SERVER_URL, {
-		command = 'get_hash_image', hash = hash_id
-	})
-end
-
 --[[
 	POST a prompt to the stable diffusion distributor server.
 

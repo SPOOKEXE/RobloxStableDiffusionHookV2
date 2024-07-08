@@ -135,11 +135,11 @@ async def total_instances() -> int:
 	return len(LOCAL_DISTRIBUTOR.instances)
 
 @sdapi_hook_v2.get('/queue_length', dependencies=[Depends(validate_api_key)])
-async def get_instance_infos() -> int:
+async def queue_length() -> int:
 	return len(LOCAL_DISTRIBUTOR.queue)
 
 @sdapi_hook_v2.get('/total_operations', dependencies=[Depends(validate_api_key)])
-async def get_instance_infos() -> int:
+async def total_operations() -> int:
 	return len(LOCAL_DISTRIBUTOR.operations.keys())
 
 @sdapi_hook_v2.get('/get_instance_infos', dependencies=[Depends(validate_api_key)])
@@ -150,8 +150,8 @@ async def get_instance_infos() -> list[dict]:
 async def get_operation_status( operation_id : str = Body(embed=True) ) -> int:
 	return await LOCAL_DISTRIBUTOR.get_operation_status(operation_id)
 
-@sdapi_hook_v2.post('/is_operaton_completed', dependencies=[Depends(validate_api_key)])
-async def is_operaton_completed( operation_id : str = Body(embed=True) ) -> bool:
+@sdapi_hook_v2.post('/is_operation_completed', dependencies=[Depends(validate_api_key)])
+async def is_operation_completed( operation_id : str = Body(embed=True) ) -> bool:
 	return await LOCAL_DISTRIBUTOR.is_operation_completed(operation_id)
 
 @sdapi_hook_v2.post('/get_operation_metadata', dependencies=[Depends(validate_api_key)])
@@ -165,9 +165,9 @@ async def get_operation_metadata( operation_id : str = Body(embed=True) ) -> dic
 async def get_operation_progress( operation_id : str = Body(embed=True) ) -> dict:
 	return await LOCAL_DISTRIBUTOR.get_operation_progress(operation_id)
 
-@sdapi_hook_v2.post('/cancel_operation_operation', dependencies=[Depends(validate_api_key)])
-async def cancel_operation_operation( operation_id : str = Body(embed=True) ) -> None:
-	await LOCAL_DISTRIBUTOR.cancel_operation_operation(operation_id)
+@sdapi_hook_v2.post('/cancel_operation', dependencies=[Depends(validate_api_key)])
+async def cancel_operation( operation_id : str = Body(embed=True) ) -> None:
+	await LOCAL_DISTRIBUTOR.cancel_operation(operation_id)
 	return None
 
 # TODO: implement properly
@@ -178,11 +178,6 @@ async def get_operation_images( operation_id : str = Body(embed=True) ) -> list[
 		return None
 	return [{'size' : item.size, 'image' : len(zlib.compress(item.data.encode('utf-8')))} for item in images]
 
-@sdapi_hook_v2.post('/cancel_operation', dependencies=[Depends(validate_api_key)])
-async def cancel_operation( operation_id : str = Body(embed=True) ) -> None:
-	await LOCAL_DISTRIBUTOR.cancel_operation(operation_id)
-	return None
-
 @sdapi_hook_v2.post('/queue_txt2img', dependencies=[Depends(validate_api_key)])
 async def queue_txt2img( params : RobloxParameters = Body(embed=True) ) -> str:
 	if params.roblox_user is not None:
@@ -190,6 +185,9 @@ async def queue_txt2img( params : RobloxParameters = Body(embed=True) ) -> str:
 
 	if params.size not in ASPECT_RATIO_MAP.keys():
 		return False, 'Invalid size parameter - must be an aspect ratio mapped value.'
+
+	if params.steps < 1 or params.steps > 30:
+		return False, 'Invalid steps parameter - must be between 1 and 30.'
 
 	width, height = ASPECT_RATIO_MAP.get(params.size)
 
