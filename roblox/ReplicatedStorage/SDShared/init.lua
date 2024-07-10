@@ -13,6 +13,15 @@ Module.OperationStatusEnums = {
 	ERRORED = 4,
 }
 
+function Module.OperationStatusFromValue( target : number ) : string?
+	for name, value in Module.OperationStatusEnums do
+		if value == target then
+			return name
+		end
+	end
+	return nil
+end
+
 Module.AspectRatioMap = {
 	["512x512"] = {512, 512},
 	["512x768"] = {512, 768},

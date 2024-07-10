@@ -43,6 +43,7 @@ class APIEndpoints:
 	refresh_checkpoints = '/sdapi/v1/refresh-checkpoints'
 	refresh_vae = '/sdapi/v1/refresh-vae' # do along with checkpoints
 	refresh_loras = '/sdapi/v1/refresh-loras' # embeddings, loras
+	refresh_embeddings = '/sdapi/v1/refresh-embeddings'
 
 	get_checkpoints = '/sdapi/v1/sd-models'
 	get_embeddings = '/sdapi/v1/embeddings'
@@ -132,8 +133,9 @@ class StableDiffusionInstance:
 		'''Get the system information for the instance.'''
 		timestamp = time.time()
 		if timestamp < self.next_info_timestamp:
-			return True, self.last_sysinfo
+			return True, self.sysinfo
 
+		_, _ = await self.refresh_info()
 		success, sys_info_raw = await self.internal_get(
 			APIEndpoints.sysinfo
 		)
@@ -155,7 +157,7 @@ class StableDiffusionInstance:
 		else:
 			CPUINFO = "unknown"
 
-		self.next_sysinfo_timestamp = timestamp + 60 # 60 second interval
+		self.next_sysinfo_timestamp = timestamp + 10 # 60 second interval
 		self.sysinfo = {
 			"OS" : type(torch_info) == dict and torch_info.get('os') or 'Unknown',
 			"RAM" : sys_info.get('RAM'),
@@ -202,12 +204,14 @@ class StableDiffusionInstance:
 		'''
 		Refresh all the stable diffusion information, which includes:
 		- Checkpoints
-		- LORAs (loras, embeddings)
+		- LORAs
+		- VAEs
+		- Embeddings
 		'''
 		# TODO: asyncio.gather?
 		hasNotErrored : bool = True
 		errorList : list[Union[str, None]] = []
-		for path in [ APIEndpoints.refresh_checkpoints, APIEndpoints.refresh_vae, APIEndpoints.refresh_loras ]:
+		for path in [ APIEndpoints.refresh_checkpoints, APIEndpoints.refresh_vae, APIEndpoints.refresh_loras, APIEndpoints.refresh_embeddings ]:
 			success, response = await self.internal_post( path )
 			if success is False:
 				hasNotErrored = False
@@ -273,7 +277,7 @@ class StableDiffusionInstance:
 		if samplers is not None:
 			base_info['samplers'] = [ data['name'] for data in samplers ]
 
-		self.next_info_timestamp = timestamp + 60
+		self.next_info_timestamp = timestamp + 10
 		self.instance_info = base_info
 
 		return base_info
@@ -439,10 +443,10 @@ class StableDiffusionDistributor:
 		return operation.uuid
 
 	async def get_operation_sdinstance( self, operation_id : str ) -> Union[StableDiffusionInstance, None]:
-		operation : Operation = self.operations.get(operation_id)
+		operation : Union[Operation, None] = self.operations.get(operation_id)
 		if operation is None:
 			return None
-		uuid : str = operation.sdinstance
+		uuid : Union[str, None] = operation.sdinstance
 		if uuid is None:
 			return None
 		for instance in self.instances:
@@ -451,21 +455,22 @@ class StableDiffusionDistributor:
 		return None
 
 	async def get_operation_status( self, operation_id : str ) -> Union[int, None]:
-		operation : Operation = self.operations.get(operation_id, None)
+		operation : Union[Operation, None] = self.operations.get(operation_id, None)
+		print(operation_id, self.operations.keys())
 		if operation is None:
 			return None
 		return operation.state
 
 	async def is_operation_completed( self, operation_id : str ) -> bool:
-		status = await self.get_operation_status(operation_id)
+		status : Union[int, None] = await self.get_operation_status(operation_id)
 		return \
 			status is None or \
 			status == OperationStatus.CANCELED.value or \
 			status == OperationStatus.ERRORED.value or \
 			status == OperationStatus.COMPLETED.value
 
-	async def get_operation_progress( self, operation_id : str ) -> Union[dict, None]:
-		instance : StableDiffusionInstance = await self.get_operation_sdinstance(operation_id)
+	async def get_operation_progress( self, operation_id : str ) -> Union[dict, str, None]:
+		instance : Union[StableDiffusionInstance, None] = await self.get_operation_sdinstance(operation_id)
 		if instance is None:
 			return None
 		success, response = await instance.get_progress()

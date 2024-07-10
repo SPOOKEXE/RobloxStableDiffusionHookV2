@@ -47,7 +47,7 @@ local function PrepareHeaders() : {}
 	return { ["Content-Type"] = "application/json", }
 end
 
-local function RequestAsync( method : 'POST' | 'GET', url : string, body : any?) : (boolean, string)
+local function RequestAsync( method : 'POST' | 'GET', url : string, body : any?) : (boolean, { [string] : any })
 	local success, data = pcall(function()
 		return HttpService:RequestAsync({Url = url, Method = method, Headers = PrepareHeaders(), Body = PrepareBody(body),})
 	end)
@@ -58,12 +58,15 @@ local function RequestAsync( method : 'POST' | 'GET', url : string, body : any?)
 	end
 
 	local decodedBody = HttpService:JSONDecode(data.Body)
-	if decodedBody['data'] then
-		local hexDecoded : string, _ = SDShared.FromHex( decodedBody['data'] )
-		return true, SDShared.zlib.Decompress(hexDecoded)
+
+	if typeof(decodedBody) == "table" then
+		if decodedBody['data'] then
+			local hexDecoded : string, _ = SDShared.FromHex( decodedBody['data'] )
+			decodedBody['data'] = SDShared.zlib.Decompress(hexDecoded)
+		end
 	end
 
-	return false, decodedBody['message']
+	return true, decodedBody
 end
 
 local function typeAssertion( param_name : string, value : any?, ... : string? )
@@ -79,7 +82,7 @@ local function typeAssertion( param_name : string, value : any?, ... : string? )
 	end
 end
 
-local function InternalGET( path : string ) : (boolean, string)
+local function InternalGET( path : string ) : boolean
 	return RequestAsync('GET', ServerURL .. path, nil)
 end
 
@@ -178,11 +181,11 @@ end
 
 -- '/get_instance_infos'
 function Module.GetInstancesInfos() : { InstanceInfo }?
-	local success, response = InternalGET('/total_operations')
+	local success, response = InternalGET('/get_instance_infos')
 	if not success then
 		return nil
 	end
-	return response and HttpService:JSONDecode(response)
+	return response
 end
 
 -- '/get_operation_status'
@@ -202,7 +205,7 @@ function Module.IsOperationCompleted( operation_id : string ) : boolean
 	if not success then
 		return nil
 	end
-	return response and response == "true"
+	return response
 end
 
 -- '/get_operation_metadata'
@@ -212,7 +215,7 @@ function Module.GetOperationMetaData( operation_id : string ) : OperationMetaDat
 	if not success then
 		return nil
 	end
-	return response and HttpService:JSONDecode(response)
+	return response
 end
 
 -- '/get_operation_progress'
@@ -222,7 +225,7 @@ function Module.GetOperationProgress( operation_id : string ) : OperationProgres
 	if not success then
 		return nil
 	end
-	return response and HttpService:JSONDecode(response)
+	return response
 end
 
 -- '/cancel_operation'
@@ -238,11 +241,11 @@ function Module.GetOperationImages( operation_id : string ) : { {size : {number}
 	if not success then
 		return nil
 	end
-	return response and HttpService:JSONDecode(response)
+	return response
 end
 
--- '/queue_text2img'
-function Module.QueueTxt2Img( params : Txt2ImgParameters ) : (boolean, string)
+-- '/queue_txt2img'
+function Module.QueueTxt2Img( params : Txt2ImgParameters ) : string?
 	typeAssertion('roblox_user', params.roblox_user, 'table', 'nil')
 	typeAssertion('timestamp', params.timestamp, 'number', 'nil')
 	typeAssertion('checkpoint', params.checkpoint, 'string')
@@ -253,11 +256,12 @@ function Module.QueueTxt2Img( params : Txt2ImgParameters ) : (boolean, string)
 	typeAssertion('sampler_name', params.sampler_name, 'string')
 	typeAssertion('size', params.size, 'string')
 	typeAssertion('seed', params.seed, 'number')
-	local success, response = InternalPOST('/queue_text2img', params)
+	local success, response = InternalPOST('/queue_txt2img', params)
 	if not success then
-		return nil, 'Failed the request due to error: ' .. tostring(response)
+		warn(response)
+		return nil
 	end
-	return true, response -- response is the operation id
+	return response -- response is the operation id
 end
 
 return Module

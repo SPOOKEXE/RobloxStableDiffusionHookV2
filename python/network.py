@@ -147,7 +147,7 @@ async def get_instance_infos() -> list[dict]:
 	return await LOCAL_DISTRIBUTOR.get_instances_infos()
 
 @sdapi_hook_v2.post('/get_operation_status', dependencies=[Depends(validate_api_key)])
-async def get_operation_status( operation_id : str = Body(embed=True) ) -> int:
+async def get_operation_status( operation_id : str = Body(embed=True) ) -> Union[int, None]:
 	return await LOCAL_DISTRIBUTOR.get_operation_status(operation_id)
 
 @sdapi_hook_v2.post('/is_operation_completed', dependencies=[Depends(validate_api_key)])
@@ -156,13 +156,13 @@ async def is_operation_completed( operation_id : str = Body(embed=True) ) -> boo
 
 @sdapi_hook_v2.post('/get_operation_metadata', dependencies=[Depends(validate_api_key)])
 async def get_operation_metadata( operation_id : str = Body(embed=True) ) -> dict:
-	operation : Operation = LOCAL_DISTRIBUTOR.operations.get(operation_id)
+	operation : Union[Operation, None] = LOCAL_DISTRIBUTOR.operations.get(operation_id)
 	if operation is None:
 		return None
 	return {"state" : operation.state, "timestamp" : operation.timestamp, "error" : operation.error}
 
 @sdapi_hook_v2.post('/get_operation_progress', dependencies=[Depends(validate_api_key)])
-async def get_operation_progress( operation_id : str = Body(embed=True) ) -> dict:
+async def get_operation_progress( operation_id : str = Body(embed=True) ) -> Union[dict, str, None]:
 	return await LOCAL_DISTRIBUTOR.get_operation_progress(operation_id)
 
 @sdapi_hook_v2.post('/cancel_operation', dependencies=[Depends(validate_api_key)])
@@ -172,14 +172,14 @@ async def cancel_operation( operation_id : str = Body(embed=True) ) -> None:
 
 # TODO: implement properly
 @sdapi_hook_v2.post('/get_operation_images', dependencies=[Depends(validate_api_key)])
-async def get_operation_images( operation_id : str = Body(embed=True) ) -> list[dict]:
-	images : list[SDImage] = await LOCAL_DISTRIBUTOR.get_operation_images(operation_id)
+async def get_operation_images( operation_id : str = Body(embed=True) ) -> Union[list[dict], None]:
+	images : Union[list[SDImage], None] = await LOCAL_DISTRIBUTOR.get_operation_images(operation_id)
 	if images is None:
 		return None
 	return [{'size' : item.size, 'image' : len(zlib.compress(item.data.encode('utf-8')))} for item in images]
 
 @sdapi_hook_v2.post('/queue_txt2img', dependencies=[Depends(validate_api_key)])
-async def queue_txt2img( params : RobloxParameters = Body(embed=True) ) -> str:
+async def queue_txt2img( params : RobloxParameters = Body(embed=False) ) -> str:
 	if params.roblox_user is not None:
 		log_roblox_params(params)
 
