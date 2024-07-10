@@ -8,6 +8,8 @@ type Txt2ImgParameters = SDApi.Txt2ImgParameters
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SDShared = require(ReplicatedStorage:WaitForChild('SDShared'))
 
+local SDRemoteEvent = SDShared.RemoteService.GetRemote('SDEvent', 'RemoteEvent', false)
+
 local SystemsContainer = {}
 
 local Module = {}

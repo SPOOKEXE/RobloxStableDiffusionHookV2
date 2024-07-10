@@ -4,6 +4,9 @@ local zlib = require(script.zlib)
 local Module = {}
 
 Module.zlib = zlib.Zlib :: {Compress : (string, { level : number }?) -> string, Decompress : (string) -> string}
+Module.Event = require(script.Event)
+Module.Maid = require(script.Maid)
+Module.RemoteService = require(script.RemoteService)
 
 Module.OperationStatusEnums = {
 	IN_QUEUE = 0,
