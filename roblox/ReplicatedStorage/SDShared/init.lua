@@ -16,6 +16,29 @@ Module.OperationStatusEnums = {
 	ERRORED = 4,
 }
 
+Module.RemoteRateLimits = {
+	Default = 1,
+
+	-- GetSDInstances = 5,
+	-- Text2Image = 5,
+
+	-- ClearPrivateImage = 3,
+	-- VoteClearPublicImage = 3,
+
+	-- GetHashStatus = 0.5,
+	-- GetHashQueue = 0.5,
+	-- GetHashProgress = 0.5,
+	-- GetHashImage = 5,
+}
+
+Module.RemoteEnums = {
+
+	-- prompting
+
+	-- operations
+
+}
+
 function Module.OperationStatusFromValue( target : number ) : string?
 	for name, value in Module.OperationStatusEnums do
 		if value == target then

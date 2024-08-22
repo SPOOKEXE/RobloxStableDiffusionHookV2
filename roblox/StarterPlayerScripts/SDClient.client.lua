@@ -13,7 +13,7 @@ local Visibility : Frame = ScreenGui.Visibility
 local UserInterfaceModule = require(script.Parent.Modules.UserInterface)
 local ViewportModule = require(script.Parent.Modules.Viewport)
 
-local SDRemoteEvent = SDShared.RemoteService.GetRemote('SDEvent', 'RemoteEvent', false)
+local SDRemoteEvent : RemoteEvent = SDShared.RemoteService.GetRemote('SDEvent', 'RemoteEvent', false)
 
 local IsContainerOpen = false
 local ContainerOpenPosition = UDim2.fromScale(0.008, 0.5)
@@ -60,5 +60,6 @@ for _, Frame in Container.Categories.Scroll:GetChildren() do
 end
 
 task.spawn(ToggleCategory, Container.Categories.Scroll.Info)
+
 
 

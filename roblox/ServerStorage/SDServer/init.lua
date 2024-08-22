@@ -8,14 +8,24 @@ type Txt2ImgParameters = SDApi.Txt2ImgParameters
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SDShared = require(ReplicatedStorage:WaitForChild('SDShared'))
 
-local SDRemoteEvent = SDShared.RemoteService.GetRemote('SDEvent', 'RemoteEvent', false)
+local SDRemoteEvent : RemoteEvent = SDShared.RemoteService.GetRemote('SDEvent', 'RemoteEvent', false)
 
 local SystemsContainer = {}
 
 local Module = {}
 
-function Module.GetSDInstanceInfo() : InstanceInfo?
+function Module.ConvertLoraInput( name : string, weight : number? ) : string
+	if weight then
+		weight = math.clamp(weight, 0, 1)
+	else
+		weight = 1
+	end
+	return string.format('<lora:%s:%s>', name, weight)
+end
 
+function Module.GetSDInstanceInfo() : InstanceInfo?
+	local instances = SDApi.GetInstancesInfos()
+	return instances and instances[1]
 end
 
 function Module.QueueTxt2Img( params : Txt2ImgParameters ) : string?
@@ -88,9 +98,17 @@ function Module.TestPrompt()
 
 end
 
+function Module.ParseRemoteData()
+
+end
+
 function Module.Start()
 
 	task.spawn(Module.TestPrompt)
+
+	SDRemoteEvent.OnServerEvent:Connect(function(LocalPlayer : Player, Job : number, ... : any?)
+		if Job == SDShared.Re
+	end)
 
 end
 
